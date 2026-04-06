@@ -620,8 +620,11 @@ def _apply_type_detail(expense, form):
         d.expense_id = expense.id
         try:
             d.liters = float(form.get('liters') or 0) or None
-            d.price_per_liter = float(form.get('price_per_liter') or 0) or None
             d.odometer = int(form.get('odometer') or 0) or None
+            ppl = float(form.get('price_per_liter') or 0) or None
+            if not ppl and d.liters and expense.amount:
+                ppl = round(expense.amount / d.liters, 2)
+            d.price_per_liter = ppl
         except (ValueError, TypeError):
             d.liters = d.price_per_liter = d.odometer = None
         d.station_location = form.get('station_location', '').strip() or None

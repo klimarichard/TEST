@@ -90,17 +90,20 @@
                             <div class="col-sm-4">
                                 <label class="form-label fw-medium small">Liters</label>
                                 <div class="input-group">
-                                    <input type="number" name="liters" class="form-control"
+                                    <input type="number" name="liters" id="litersInput" class="form-control"
                                            step="0.01" min="0" placeholder="0.00"
                                            value="{{ expense.fuel_detail.liters if expense and expense.fuel_detail and expense.fuel_detail.liters else '' }}">
                                     <span class="input-group-text">L</span>
                                 </div>
                             </div>
                             <div class="col-sm-4">
-                                <label class="form-label fw-medium small">Price / Liter</label>
+                                <label class="form-label fw-medium small">Price / Liter
+                                    <span class="text-muted fw-normal">(auto)</span>
+                                </label>
                                 <div class="input-group">
-                                    <input type="number" name="price_per_liter" class="form-control"
-                                           step="0.001" min="0" placeholder="0.000"
+                                    <input type="number" name="price_per_liter" id="pricePerLiterInput"
+                                           class="form-control bg-light" step="0.01" min="0"
+                                           placeholder="—" readonly
                                            value="{{ expense.fuel_detail.price_per_liter if expense and expense.fuel_detail and expense.fuel_detail.price_per_liter else '' }}">
                                     <span class="input-group-text">Kč</span>
                                 </div>
@@ -278,9 +281,22 @@ const s = document.getElementById('fields-{{ expense.expense_type }}');
 if (s) s.style.display = '';
 {% endif %}
 
-document.getElementById('amountInput').addEventListener('input', updateCZK);
+function computePricePerLiter() {
+    const liters = parseFloat(document.getElementById('litersInput')?.value);
+    const amount = parseFloat(document.getElementById('amountInput').value);
+    const pplField = document.getElementById('pricePerLiterInput');
+    if (pplField && liters > 0 && amount > 0) {
+        pplField.value = (amount / liters).toFixed(2);
+    } else if (pplField) {
+        pplField.value = '';
+    }
+}
+
+document.getElementById('amountInput').addEventListener('input', () => { updateCZK(); computePricePerLiter(); });
 document.getElementById('currencyInput').addEventListener('change', updateCZK);
+document.getElementById('litersInput')?.addEventListener('input', computePricePerLiter);
 // Run once on load if editing and non-CZK
 updateCZK();
+computePricePerLiter();
 </script>
 {% endblock %}
