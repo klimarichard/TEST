@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — CarTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard
+    </h4>
+    <a href="{{ url_for('car_new') }}" class="btn btn-primary btn-sm rounded-3">
+        <i class="bi bi-plus-lg me-1"></i>Add Car
+    </a>
+</div>
+
+{# ── Stat cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-primary bg-opacity-10">
+                    <i class="bi bi-car-front text-primary"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Cars</div>
+                    <div class="fs-4 fw-bold lh-1">{{ cars|length }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-success bg-opacity-10">
+                    <i class="bi bi-receipt text-success"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Expenses</div>
+                    <div class="fs-4 fw-bold lh-1">{{ total_expense_count }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-info bg-opacity-10">
+                    <i class="bi bi-cash-stack text-info"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Total Spent</div>
+                    <div class="fs-5 fw-bold lh-1">{{ total_spent | czk }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-warning bg-opacity-10">
+                    <i class="bi bi-calendar3 text-warning"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">This Month</div>
+                    <div class="fs-5 fw-bold lh-1">{{ this_month_total | czk }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if not cars %}
+<div class="card">
+    <div class="card-body empty-state">
+        <i class="bi bi-car-front"></i>
+        <h5 class="text-muted">No cars yet</h5>
+        <p class="text-muted small">Add your first car to start tracking expenses.</p>
+        <a href="{{ url_for('car_new') }}" class="btn btn-primary rounded-3">
+            <i class="bi bi-plus-circle me-2"></i>Add Your First Car
+        </a>
+    </div>
+</div>
+{% else %}
+
+{# ── Charts ── #}
+{% if chart_monthly.labels %}
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold text-muted mb-3">Monthly Spending (CZK)</h6>
+                <canvas id="monthlyChart" height="110"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold text-muted mb-3">By Category</h6>
+                {% if chart_types.labels %}
+                <canvas id="typeChart"></canvas>
+                {% else %}
+                <div class="empty-state py-4"><i class="bi bi-pie-chart" style="font-size:2rem; opacity:.2"></i><p class="small">No data yet</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Per-car cards ── #}
+<h6 class="fw-semibold text-muted mb-3">Your Cars</h6>
+<div class="row g-3 mb-4">
+    {% for car in cars %}
+    <div class="col-md-6 col-lg-4">
+        <a href="{{ url_for('car_detail', car_id=car.id) }}" class="text-decoration-none">
+            <div class="card card-hover h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <div class="fw-bold">{{ car.name }}</div>
+                            {% if car.make %}
+                            <div class="text-muted small">
+                                {{ car.make }}{% if car.model_name %} {{ car.model_name }}{% endif %}
+                                {% if car.year %} ({{ car.year }}){% endif %}
+                            </div>
+                            {% endif %}
+                            {% if car.license_plate %}
+                            <span class="badge bg-light text-dark border mt-1 small">{{ car.license_plate }}</span>
+                            {% endif %}
+                        </div>
+                        {% if car.owner_id == current_user.id %}
+                        <span class="badge bg-primary-subtle text-primary rounded-pill small">Owner</span>
+                        {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small">Shared</span>
+                        {% endif %}
+                    </div>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Total spent</span>
+                        <span class="fw-bold">{{ car_totals[car.id] | czk }}</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+{# ── Recent expenses ── #}
+{% if recent_expenses %}
+<div class="card">
+    <div class="card-body">
+        <h6 class="fw-semibold text-muted mb-3">Recent Expenses</h6>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="fw-medium">Date</th>
+                        <th class="fw-medium">Car</th>
+                        <th class="fw-medium">Type</th>
+                        <th class="fw-medium d-none d-md-table-cell">Details</th>
+                        <th class="fw-medium text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for e in recent_expenses %}
+                <tr>
+                    <td class="text-muted small text-nowrap">{{ e.date.strftime('%d.%m.%Y') }}</td>
+                    <td>
+                        <a href="{{ url_for('car_detail', car_id=e.car_id) }}"
+                           class="text-decoration-none fw-medium text-dark">{{ e.car.name }}</a>
+                    </td>
+                    <td>
+                        <span class="badge-type badge-{{ e.expense_type }}">
+                            <i class="bi {{ e.type_icon }}"></i>{{ e.type_label }}
+                        </span>
+                    </td>
+                    <td class="text-muted small d-none d-md-table-cell">
+                        {% if e.detail %}{{ e.detail.summary }}{% endif %}
+                    </td>
+                    <td class="text-end">
+                        <span class="fw-semibold">{{ e.amount_czk | czk }}</span>
+                        {% if e.currency != 'CZK' %}
+                        <div class="text-muted" style="font-size:.75rem">{{ e.amount }} {{ e.currency }}</div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const monthlyData = {{ chart_monthly | tojson }};
+const typeData = {{ chart_types | tojson }};
+
+if (monthlyData.labels.length > 0) {
+    new Chart(document.getElementById('monthlyChart'), {
+        type: 'bar',
+        data: {
+            labels: monthlyData.labels,
+            datasets: [{
+                label: 'CZK',
+                data: monthlyData.data,
+                backgroundColor: 'rgba(13,110,253,0.12)',
+                borderColor: '#0d6efd',
+                borderWidth: 2,
+                borderRadius: 6,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6c757d' } },
+                x: { grid: { display: false }, ticks: { color: '#6c757d' } }
+            }
+        }
+    });
+}
+
+if (typeData.labels.length > 0) {
+    new Chart(document.getElementById('typeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: typeData.labels,
+            datasets: [{
+                data: typeData.data,
+                backgroundColor: typeData.colors,
+                borderWidth: 3,
+                borderColor: '#fff',
+                hoverOffset: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { usePointStyle: true, padding: 14, font: { size: 12 } }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

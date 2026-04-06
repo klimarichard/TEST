@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% block title %}{% if expense %}Edit Expense{% else %}Add Expense{% endif %} — {{ car.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-9 col-lg-7">
+        <div class="page-header">
+            <h4 class="fw-bold mb-0">
+                <i class="bi bi-receipt me-2 text-primary"></i>
+                {% if expense %}Edit Expense{% else %}Add Expense{% endif %}
+                <span class="text-muted fw-normal fs-6 ms-1">— {{ car.name }}</span>
+            </h4>
+            <a href="{{ url_for('car_detail', car_id=car.id) }}"
+               class="btn btn-sm btn-outline-secondary rounded-3">
+                <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST" id="expenseForm">
+
+                    {# ── Type selector (new only) ── #}
+                    {% if not expense %}
+                    <div class="mb-4">
+                        <label class="form-label fw-medium small">Expense Type</label>
+                        <div class="row g-2" id="typeTabs">
+                            {% set types_meta = [
+                                ('fuel',      'bi-fuel-pump',          'Fuel'),
+                                ('repair',    'bi-wrench-adjustable',  'Repair'),
+                                ('toll',      'bi-signpost-2',         'Toll'),
+                                ('insurance', 'bi-shield-check',       'Insurance'),
+                                ('gadget',    'bi-phone',              'Gadget'),
+                            ] %}
+                            {% for t, icon, label in types_meta %}
+                            <div class="col-6 col-sm-4 col-md">
+                                <div class="type-tab {% if expense_type == t %}active-{{ t }}{% endif %}"
+                                     data-type="{{ t }}" onclick="switchType('{{ t }}')">
+                                    <i class="bi {{ icon }} d-block fs-5 mb-1"></i>
+                                    {{ label }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" name="expense_type" id="expenseTypeInput" value="{{ expense_type }}">
+                    </div>
+                    {% else %}
+                    <input type="hidden" name="expense_type" value="{{ expense.expense_type }}">
+                    <div class="mb-4">
+                        <span class="badge-type badge-{{ expense.expense_type }} fs-6 px-3 py-2">
+                            <i class="bi {{ expense.type_icon }}"></i>{{ expense.type_label }}
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    {# ── Common fields ── #}
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-5">
+                            <label class="form-label fw-medium small">Date <span class="text-danger">*</span></label>
+                            <input type="date" name="date" class="form-control" required
+                                   value="{{ expense.date.isoformat() if expense else today }}">
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label fw-medium small">Amount <span class="text-danger">*</span></label>
+                            <input type="number" name="amount" id="amountInput" class="form-control"
+                                   step="0.01" min="0.01" required
+                                   value="{{ expense.amount if expense else '' }}"
+                                   placeholder="0.00">
+                        </div>
+                        <div class="col-sm-3">
+                            <label class="form-label fw-medium small">Currency</label>
+                            <select name="currency" id="currencyInput" class="form-select">
+                                {% for c in currencies %}
+                                <option value="{{ c }}"
+                                    {% if expense and expense.currency == c %}selected
+                                    {% elif not expense and c == 'CZK' %}selected{% endif %}>
+                                    {{ c }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    {# CZK conversion hint #}
+                    <div id="czk-hint" class="mb-3"></div>
+
+                    {# ── Fuel fields ── #}
+                    <div id="fields-fuel" class="type-fields">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-4">
+                                <label class="form-label fw-medium small">Liters</label>
+                                <div class="input-group">
+                                    <input type="number" name="liters" class="form-control"
+                                           step="0.01" min="0" placeholder="0.00"
+                                           value="{{ expense.fuel_detail.liters if expense and expense.fuel_detail and expense.fuel_detail.liters else '' }}">
+                                    <span class="input-group-text">L</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label fw-medium small">Price / Liter</label>
+                                <div class="input-group">
+                                    <input type="number" name="price_per_liter" class="form-control"
+                                           step="0.001" min="0" placeholder="0.000"
+                                           value="{{ expense.fuel_detail.price_per_liter if expense and expense.fuel_detail and expense.fuel_detail.price_per_liter else '' }}">
+                                    <span class="input-group-text">Kč</span>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label fw-medium small">Odometer</label>
+                                <div class="input-group">
+                                    <input type="number" name="odometer" class="form-control"
+                                           min="0" placeholder="km"
+                                           value="{{ expense.fuel_detail.odometer if expense and expense.fuel_detail and expense.fuel_detail.odometer else '' }}">
+                                    <span class="input-group-text">km</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Fuel Station Location</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+                                <input type="text" name="station_location" class="form-control"
+                                       placeholder="e.g. Shell Praha - Smíchov"
+                                       value="{{ expense.fuel_detail.station_location if expense and expense.fuel_detail and expense.fuel_detail.station_location else '' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {# ── Repair fields ── #}
+                    <div id="fields-repair" class="type-fields" style="display:none">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Description</label>
+                            <textarea name="description" class="form-control" rows="3"
+                                      placeholder="What was repaired?">{{ expense.repair_detail.description if expense and expense.repair_detail and expense.repair_detail.description else '' }}</textarea>
+                        </div>
+                    </div>
+
+                    {# ── Toll fields ── #}
+                    <div id="fields-toll" class="type-fields" style="display:none">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-5">
+                                <label class="form-label fw-medium small">Toll Type</label>
+                                <select name="toll_type" class="form-select">
+                                    <option value="">— Select type —</option>
+                                    {% for tt in toll_types %}
+                                    <option value="{{ tt }}"
+                                        {% if expense and expense.toll_detail and expense.toll_detail.toll_type == tt %}selected{% endif %}>
+                                        {{ tt }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-sm-7">
+                                <label class="form-label fw-medium small">Route / Location</label>
+                                <input type="text" name="route" class="form-control"
+                                       placeholder="e.g. D1 Praha → Brno"
+                                       value="{{ expense.toll_detail.route if expense and expense.toll_detail and expense.toll_detail.route else '' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {# ── Insurance fields ── #}
+                    <div id="fields-insurance" class="type-fields" style="display:none">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-5">
+                                <label class="form-label fw-medium small">Insurance Type</label>
+                                <select name="insurance_type" class="form-select">
+                                    <option value="">— Select type —</option>
+                                    {% for it in insurance_types %}
+                                    <option value="{{ it }}"
+                                        {% if expense and expense.insurance_detail and expense.insurance_detail.insurance_type == it %}selected{% endif %}>
+                                        {{ it }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-sm-7">
+                                <label class="form-label fw-medium small">Provider</label>
+                                <input type="text" name="provider" class="form-control"
+                                       placeholder="e.g. Allianz, Česká pojišťovna"
+                                       value="{{ expense.insurance_detail.provider if expense and expense.insurance_detail and expense.insurance_detail.provider else '' }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Expiration Date</label>
+                            <input type="date" name="expiration_date" class="form-control"
+                                   style="max-width:220px"
+                                   value="{{ expense.insurance_detail.expiration_date.isoformat() if expense and expense.insurance_detail and expense.insurance_detail.expiration_date else '' }}">
+                        </div>
+                    </div>
+
+                    {# ── Gadget fields ── #}
+                    <div id="fields-gadget" class="type-fields" style="display:none">
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Gadget Type</label>
+                            <input type="text" name="gadget_type" class="form-control"
+                                   placeholder="e.g. Dash cam, GPS, phone holder"
+                                   value="{{ expense.gadget_detail.gadget_type if expense and expense.gadget_detail and expense.gadget_detail.gadget_type else '' }}">
+                        </div>
+                    </div>
+
+                    {# ── Notes ── #}
+                    <div class="mb-4">
+                        <label class="form-label fw-medium small">Notes <span class="text-muted fw-normal">(optional)</span></label>
+                        <textarea name="notes" class="form-control" rows="2"
+                                  placeholder="Any additional notes…">{{ expense.notes if expense and expense.notes else '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary rounded-3 px-4">
+                            <i class="bi bi-check-lg me-1"></i>
+                            {% if expense %}Save Changes{% else %}Add Expense{% endif %}
+                        </button>
+                        <a href="{{ url_for('car_detail', car_id=car.id) }}"
+                           class="btn btn-outline-secondary rounded-3">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const currentType = '{{ expense_type }}';
+let rateCache = {};
+
+function switchType(type) {
+    // Update tab appearance
+    document.querySelectorAll('.type-tab').forEach(tab => {
+        tab.className = 'type-tab';
+        if (tab.dataset.type === type) {
+            tab.classList.add('active-' + type);
+        }
+    });
+    // Show/hide field sections
+    document.querySelectorAll('.type-fields').forEach(el => el.style.display = 'none');
+    const section = document.getElementById('fields-' + type);
+    if (section) section.style.display = '';
+    // Update hidden input
+    document.getElementById('expenseTypeInput').value = type;
+}
+
+async function updateCZK() {
+    const amount = parseFloat(document.getElementById('amountInput').value);
+    const currency = document.getElementById('currencyInput').value;
+    const hint = document.getElementById('czk-hint');
+    if (!amount || isNaN(amount) || currency === 'CZK') {
+        hint.textContent = '';
+        return;
+    }
+    try {
+        if (rateCache[currency]) {
+            const czk = (amount * rateCache[currency]).toFixed(0);
+            hint.innerHTML = `<i class="bi bi-arrow-right me-1"></i>≈ ${czk.replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')} Kč`;
+            return;
+        }
+        const resp = await fetch(`/api/exchange-rate?from=${currency}`);
+        const data = await resp.json();
+        if (data.rate) {
+            rateCache[currency] = data.rate;
+            const czk = (amount * data.rate).toFixed(0);
+            hint.innerHTML = `<i class="bi bi-arrow-right me-1"></i>≈ ${czk.replace(/\B(?=(\d{3})+(?!\d))/g,'\u202f')} Kč`;
+        }
+    } catch (e) {
+        hint.textContent = '';
+    }
+}
+
+// Init
+{% if not expense %}
+switchType(currentType);
+{% else %}
+// For edit: just show correct section
+document.querySelectorAll('.type-fields').forEach(el => el.style.display = 'none');
+const s = document.getElementById('fields-{{ expense.expense_type }}');
+if (s) s.style.display = '';
+{% endif %}
+
+document.getElementById('amountInput').addEventListener('input', updateCZK);
+document.getElementById('currencyInput').addEventListener('change', updateCZK);
+// Run once on load if editing and non-CZK
+updateCZK();
+</script>
+{% endblock %}

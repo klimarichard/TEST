@@ -1,0 +1,155 @@
+/* ─── Base ─────────────────────────────────────────────────────────────────── */
+body {
+    background-color: #f0f2f5;
+    font-size: 0.925rem;
+}
+
+/* ─── Cards ─────────────────────────────────────────────────────────────────── */
+.card {
+    border-radius: 14px !important;
+    border: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07), 0 2px 12px rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.card-hover:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+}
+
+/* ─── Navbar ─────────────────────────────────────────────────────────────────── */
+.navbar {
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+}
+
+.navbar-brand {
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+}
+
+/* ─── Expense type badges ────────────────────────────────────────────────────── */
+.badge-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.775rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+
+.badge-fuel     { background: #e0f7fc; color: #0891b2; border-color: #b2ebf4; }
+.badge-repair   { background: #fde8e8; color: #c53030; border-color: #f7b4b4; }
+.badge-toll     { background: #fef9e7; color: #b45309; border-color: #fde68a; }
+.badge-insurance { background: #e6f4ea; color: #166534; border-color: #a7f3d0; }
+.badge-gadget   { background: #f3e8ff; color: #6d28d9; border-color: #ddd6fe; }
+
+/* ─── Stat icon boxes ────────────────────────────────────────────────────────── */
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────────────────── */
+.table > :not(caption) > * > * {
+    padding: 0.65rem 0.85rem;
+}
+
+.table-hover > tbody > tr:hover > * {
+    background-color: rgba(13, 110, 253, 0.04);
+}
+
+/* ─── Forms ──────────────────────────────────────────────────────────────────── */
+.form-control, .form-select {
+    border-radius: 8px;
+    border-color: #dee2e6;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}
+
+.input-group-text {
+    border-radius: 8px 0 0 8px;
+    background: #f8f9fa;
+    color: #6c757d;
+}
+
+/* ─── Expense type selector tabs ─────────────────────────────────────────────── */
+.type-tab {
+    cursor: pointer;
+    border-radius: 10px !important;
+    padding: 0.55rem 1rem;
+    border: 2px solid #e9ecef;
+    background: #fff;
+    color: #495057;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.15s ease;
+    text-align: center;
+    user-select: none;
+}
+
+.type-tab:hover {
+    border-color: #adb5bd;
+}
+
+.type-tab.active-fuel     { border-color: #0dcaf0; background: #e0f7fc; color: #0891b2; }
+.type-tab.active-repair   { border-color: #dc3545; background: #fde8e8; color: #c53030; }
+.type-tab.active-toll     { border-color: #ffc107; background: #fef9e7; color: #b45309; }
+.type-tab.active-insurance { border-color: #198754; background: #e6f4ea; color: #166534; }
+.type-tab.active-gadget   { border-color: #6f42c1; background: #f3e8ff; color: #6d28d9; }
+
+/* ─── Page headings ──────────────────────────────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* ─── Insurance warning ──────────────────────────────────────────────────────── */
+.insurance-warning {
+    border-left: 3px solid #ffc107;
+    background: #fffbeb;
+    border-radius: 0 8px 8px 0;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.85rem;
+}
+
+/* ─── Empty states ───────────────────────────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 3.5rem 1rem;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 3.5rem;
+    opacity: 0.25;
+    display: block;
+    margin-bottom: 1rem;
+}
+
+/* ─── CZK conversion hint ────────────────────────────────────────────────────── */
+#czk-hint {
+    font-size: 0.8rem;
+    color: #6c757d;
+    min-height: 1.1em;
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────────────────── */
+footer {
+    font-size: 0.8rem;
+}

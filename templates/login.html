@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}Sign In — CarTracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center" style="margin-top: 5rem;">
+    <div class="col-sm-9 col-md-6 col-lg-4">
+        <div class="card shadow">
+            <div class="card-body p-4 p-md-5">
+                <div class="text-center mb-4">
+                    <div class="stat-icon bg-primary bg-opacity-10 mx-auto mb-3">
+                        <i class="bi bi-car-front-fill text-primary fs-4"></i>
+                    </div>
+                    <h4 class="fw-bold mb-0">CarTracker</h4>
+                    <p class="text-muted small mt-1">Sign in to your account</p>
+                </div>
+
+                <form method="POST" autocomplete="on">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" name="username" class="form-control"
+                                   autocomplete="username" required autofocus>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password" name="password" class="form-control"
+                                   autocomplete="current-password" required>
+                        </div>
+                    </div>
+                    <div class="mb-4 form-check">
+                        <input type="checkbox" class="form-check-input" name="remember" id="remember">
+                        <label class="form-check-label small" for="remember">Remember me</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                    </button>
+                </form>
+            </div>
+        </div>
+        <p class="text-center text-muted small mt-3">
+            Don't have an account? Contact your administrator.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}{% if user %}Edit {{ user.username }}{% else %}New User{% endif %} — Admin{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-5">
+        <div class="page-header">
+            <h4 class="fw-bold mb-0">
+                <i class="bi bi-person-{% if user %}gear{% else %}plus{% endif %} me-2 text-primary"></i>
+                {% if user %}Edit User{% else %}New User{% endif %}
+            </h4>
+            <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary rounded-3">
+                <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Username <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" name="username" class="form-control"
+                                   value="{{ user.username if user else '' }}"
+                                   required autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Email <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <input type="email" name="email" class="form-control"
+                                   value="{{ user.email if user else '' }}"
+                                   required autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">
+                            Password{% if user %} <span class="text-muted fw-normal">(leave blank to keep current)</span>{% else %} <span class="text-danger">*</span>{% endif %}
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password" name="password" class="form-control"
+                                   {% if not user %}required{% endif %}
+                                   autocomplete="new-password"
+                                   placeholder="{% if user %}New password (optional){% else %}Password{% endif %}">
+                        </div>
+                    </div>
+
+                    <div class="mb-4 form-check form-switch ps-0 d-flex align-items-center gap-3">
+                        <input type="checkbox" class="form-check-input ms-0" name="is_admin"
+                               id="isAdmin" role="switch"
+                               {% if user and user.is_admin %}checked{% endif %}>
+                        <label class="form-check-label fw-medium small" for="isAdmin">
+                            <i class="bi bi-shield-lock me-1 text-warning"></i>Administrator
+                            <div class="text-muted fw-normal" style="font-size:.8rem">
+                                Admins can manage all users.
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary rounded-3 px-4">
+                            <i class="bi bi-check-lg me-1"></i>
+                            {% if user %}Save Changes{% else %}Create User{% endif %}
+                        </button>
+                        <a href="{{ url_for('admin_index') }}" class="btn btn-outline-secondary rounded-3">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

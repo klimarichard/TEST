@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}{% if car %}Edit {{ car.name }}{% else %}Add Car{% endif %} — CarTracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="page-header">
+            <h4 class="fw-bold mb-0">
+                <i class="bi bi-car-front me-2 text-primary"></i>
+                {% if car %}Edit Car{% else %}Add New Car{% endif %}
+            </h4>
+            <a href="{{ url_for('cars_list') }}" class="btn btn-sm btn-outline-secondary rounded-3">
+                <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium small">Nickname <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control"
+                               value="{{ car.name if car else '' }}"
+                               placeholder="e.g. Family SUV" required>
+                        <div class="form-text">A short name to identify this car.</div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-medium small">Make</label>
+                            <input type="text" name="make" class="form-control"
+                                   value="{{ car.make or '' if car else '' }}"
+                                   placeholder="e.g. Škoda">
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-medium small">Model</label>
+                            <input type="text" name="model_name" class="form-control"
+                                   value="{{ car.model_name or '' if car else '' }}"
+                                   placeholder="e.g. Octavia">
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6">
+                            <label class="form-label fw-medium small">Year</label>
+                            <input type="number" name="year" class="form-control"
+                                   value="{{ car.year or '' if car else '' }}"
+                                   placeholder="e.g. 2021" min="1900" max="2099">
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label fw-medium small">License Plate</label>
+                            <input type="text" name="license_plate" class="form-control"
+                                   value="{{ car.license_plate or '' if car else '' }}"
+                                   placeholder="e.g. 1AB 2345"
+                                   style="text-transform:uppercase">
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary rounded-3 px-4">
+                            <i class="bi bi-check-lg me-1"></i>
+                            {% if car %}Save Changes{% else %}Add Car{% endif %}
+                        </button>
+                        <a href="{{ url_for('car_detail', car_id=car.id) if car else url_for('cars_list') }}"
+                           class="btn btn-outline-secondary rounded-3">Cancel</a>
+
+                        {% if car and car.owner_id == current_user.id %}
+                        <form method="POST" action="{{ url_for('car_delete', car_id=car.id) }}"
+                              class="ms-auto"
+                              onsubmit="return confirm('Delete {{ car.name }}? This will also delete all its expenses.')">
+                            <button type="submit" class="btn btn-outline-danger rounded-3 btn-sm">
+                                <i class="bi bi-trash me-1"></i>Delete Car
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

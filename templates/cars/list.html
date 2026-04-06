@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}My Cars — CarTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-car-front me-2 text-primary"></i>My Cars
+    </h4>
+    <a href="{{ url_for('car_new') }}" class="btn btn-primary btn-sm rounded-3">
+        <i class="bi bi-plus-lg me-1"></i>Add Car
+    </a>
+</div>
+
+{% if not cars %}
+<div class="card">
+    <div class="card-body empty-state">
+        <i class="bi bi-car-front"></i>
+        <h5 class="text-muted">No cars yet</h5>
+        <p class="text-muted small">Add a car to start tracking its expenses.</p>
+        <a href="{{ url_for('car_new') }}" class="btn btn-primary rounded-3">
+            <i class="bi bi-plus-circle me-2"></i>Add Your First Car
+        </a>
+    </div>
+</div>
+{% else %}
+<div class="row g-3">
+    {% for car in cars %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card card-hover h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <h5 class="fw-bold mb-0">{{ car.name }}</h5>
+                    {% if car.owner_id == current_user.id %}
+                    <span class="badge bg-primary-subtle text-primary rounded-pill">Owner</span>
+                    {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary rounded-pill">Shared</span>
+                    {% endif %}
+                </div>
+
+                {% if car.make or car.model_name %}
+                <div class="text-muted small mb-1">
+                    {{ car.make or '' }} {{ car.model_name or '' }}
+                    {% if car.year %}({{ car.year }}){% endif %}
+                </div>
+                {% endif %}
+
+                {% if car.license_plate %}
+                <span class="badge bg-light text-dark border small">
+                    <i class="bi bi-card-text me-1"></i>{{ car.license_plate }}
+                </span>
+                {% endif %}
+
+                <hr class="my-3">
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="text-muted small">Total spent</span>
+                    <span class="fw-bold">{{ car.expenses | sum(attribute='amount_czk') | czk }}</span>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('car_detail', car_id=car.id) }}"
+                       class="btn btn-sm btn-primary flex-grow-1 rounded-3">
+                        <i class="bi bi-bar-chart me-1"></i>View
+                    </a>
+                    {% if car.owner_id == current_user.id %}
+                    <a href="{{ url_for('car_edit', car_id=car.id) }}"
+                       class="btn btn-sm btn-outline-secondary rounded-3">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    <a href="{{ url_for('car_share', car_id=car.id) }}"
+                       class="btn btn-sm btn-outline-secondary rounded-3">
+                        <i class="bi bi-share"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Share {{ car.name }} — CarTracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="page-header">
+            <h4 class="fw-bold mb-0">
+                <i class="bi bi-share me-2 text-primary"></i>Share {{ car.name }}
+            </h4>
+            <a href="{{ url_for('car_detail', car_id=car.id) }}" class="btn btn-sm btn-outline-secondary rounded-3">
+                <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+        </div>
+
+        {# ── Add user ── #}
+        <div class="card mb-4">
+            <div class="card-body p-4">
+                <h6 class="fw-semibold mb-3">Share with a user</h6>
+                <form method="POST">
+                    <input type="hidden" name="action" value="add">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        <input type="text" name="username" class="form-control"
+                               placeholder="Enter username" required>
+                        <button type="submit" class="btn btn-primary rounded-end rounded-3">
+                            <i class="bi bi-person-plus me-1"></i>Add
+                        </button>
+                    </div>
+                    <div class="form-text mt-1">
+                        Shared users can view the car and add their own expenses.
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# ── Current shares ── #}
+        <div class="card">
+            <div class="card-body p-4">
+                <h6 class="fw-semibold mb-3">Current access</h6>
+
+                {# Owner row #}
+                <div class="d-flex align-items-center py-2 border-bottom">
+                    <div class="stat-icon bg-primary bg-opacity-10 me-3" style="width:36px;height:36px;font-size:1rem">
+                        <i class="bi bi-person-fill text-primary"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">{{ car.owner.username }}</div>
+                        <div class="text-muted small">Owner</div>
+                    </div>
+                    <span class="badge bg-primary-subtle text-primary rounded-pill">Owner</span>
+                </div>
+
+                {% if not shared_users %}
+                <div class="text-muted small text-center py-3">No shared users yet.</div>
+                {% else %}
+                {% for user in shared_users %}
+                <div class="d-flex align-items-center py-2 {% if not loop.last %}border-bottom{% endif %}">
+                    <div class="stat-icon bg-secondary bg-opacity-10 me-3" style="width:36px;height:36px;font-size:1rem">
+                        <i class="bi bi-person text-secondary"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-medium">{{ user.username }}</div>
+                        <div class="text-muted small">{{ user.email }}</div>
+                    </div>
+                    <form method="POST"
+                          onsubmit="return confirm('Remove {{ user.username }}\'s access?')">
+                        <input type="hidden" name="action" value="remove">
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-3 py-0">
+                            <i class="bi bi-person-dash"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

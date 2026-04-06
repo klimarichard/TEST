@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+{% block title %}{{ car.name }} — CarTracker{% endblock %}
+
+{% block content %}
+
+{# ── Header ── #}
+<div class="page-header">
+    <div>
+        <h4 class="fw-bold mb-0">
+            <i class="bi bi-car-front me-2 text-primary"></i>{{ car.name }}
+        </h4>
+        {% if car.make or car.model_name %}
+        <div class="text-muted small mt-1">
+            {{ car.make or '' }} {{ car.model_name or '' }}
+            {% if car.year %}· {{ car.year }}{% endif %}
+            {% if car.license_plate %}
+            <span class="badge bg-light text-dark border ms-1">{{ car.license_plate }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if is_owner %}
+        <a href="{{ url_for('car_share', car_id=car.id) }}" class="btn btn-sm btn-outline-secondary rounded-3">
+            <i class="bi bi-share me-1"></i>Share
+        </a>
+        <a href="{{ url_for('car_edit', car_id=car.id) }}" class="btn btn-sm btn-outline-secondary rounded-3">
+            <i class="bi bi-pencil me-1"></i>Edit
+        </a>
+        {% endif %}
+        <div class="dropdown">
+            <button class="btn btn-primary btn-sm rounded-3 dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-plus-lg me-1"></i>Add Expense
+            </button>
+            <ul class="dropdown-menu shadow-sm border-0 rounded-3">
+                {% for t in EXPENSE_TYPES %}
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('expense_new', car_id=car.id, type=t) }}">
+                        <i class="bi {{ TYPE_ICONS[t] }} me-2 text-muted"></i>{{ TYPE_LABELS[t] }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+{# ── Insurance warnings ── #}
+{% for e in insurance_warnings %}
+<div class="insurance-warning mb-2 d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+    <span>
+        {% if e.insurance_detail.is_expired %}
+        <strong>Expired:</strong>
+        {% else %}
+        <strong>Expiring soon:</strong>
+        {% endif %}
+        {{ e.insurance_detail.insurance_type or 'Insurance' }}
+        {% if e.insurance_detail.provider %}({{ e.insurance_detail.provider }}){% endif %}
+        — {{ e.insurance_detail.expiration_date.strftime('%d.%m.%Y') }}
+    </span>
+    <a href="{{ url_for('expense_edit', expense_id=e.id) }}" class="ms-auto btn btn-sm btn-warning rounded-3 py-0">
+        Update
+    </a>
+</div>
+{% endfor %}
+
+{# ── Stat row ── #}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-primary bg-opacity-10">
+                    <i class="bi bi-cash-stack text-primary"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Total Spent</div>
+                    <div class="fw-bold fs-6">{{ total_spent | czk }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-info bg-opacity-10">
+                    <i class="bi bi-receipt text-info"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Expenses</div>
+                    <div class="fw-bold fs-4 lh-1">{{ expenses|length }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% set shared_count = car.shares|length %}
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-secondary bg-opacity-10">
+                    <i class="bi bi-people text-secondary"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Shared With</div>
+                    <div class="fw-bold fs-4 lh-1">{{ shared_count }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% if chart_fuel_eff.data %}
+    {% set latest_eff = chart_fuel_eff.data[-1] %}
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-warning bg-opacity-10">
+                    <i class="bi bi-fuel-pump text-warning"></i>
+                </div>
+                <div>
+                    <div class="text-muted small">Last Efficiency</div>
+                    <div class="fw-bold fs-6">{{ latest_eff }} L/100 km</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Charts ── #}
+{% if expenses %}
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold text-muted mb-3">Monthly Spending by Category (CZK)</h6>
+                <canvas id="stackedChart" height="140"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold text-muted mb-3">Expense Breakdown</h6>
+                <canvas id="typeChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if chart_fuel_eff.labels %}
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="fw-semibold text-muted mb-3">Fuel Efficiency (L / 100 km)</h6>
+        <canvas id="fuelEffChart" height="80"></canvas>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+{# ── Expenses table ── #}
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-semibold text-muted mb-0">All Expenses</h6>
+        </div>
+
+        {% if not expenses %}
+        <div class="empty-state py-4">
+            <i class="bi bi-receipt" style="font-size:2.5rem; opacity:.2"></i>
+            <p class="text-muted small mt-2">No expenses yet. Add the first one!</p>
+        </div>
+        {% else %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="fw-medium">Date</th>
+                        <th class="fw-medium">Type</th>
+                        <th class="fw-medium d-none d-md-table-cell">Details</th>
+                        <th class="fw-medium d-none d-sm-table-cell">Added by</th>
+                        <th class="fw-medium text-end">Amount</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for e in expenses %}
+                <tr>
+                    <td class="text-muted small text-nowrap">{{ e.date.strftime('%d.%m.%Y') }}</td>
+                    <td>
+                        <span class="badge-type badge-{{ e.expense_type }}">
+                            <i class="bi {{ e.type_icon }}"></i>{{ e.type_label }}
+                        </span>
+                    </td>
+                    <td class="text-muted small d-none d-md-table-cell" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                        {% if e.detail %}{{ e.detail.summary }}{% endif %}
+                    </td>
+                    <td class="text-muted small d-none d-sm-table-cell">{{ e.user.username }}</td>
+                    <td class="text-end">
+                        <span class="fw-semibold">{{ e.amount_czk | czk }}</span>
+                        {% if e.currency != 'CZK' %}
+                        <div class="text-muted" style="font-size:.75rem">{{ e.amount }} {{ e.currency }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        {% if e.can_edit(current_user) %}
+                        <a href="{{ url_for('expense_edit', expense_id=e.id) }}"
+                           class="btn btn-sm btn-outline-secondary rounded-2 py-0 px-2 me-1">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="POST" action="{{ url_for('expense_delete', expense_id=e.id) }}"
+                              style="display:inline"
+                              onsubmit="return confirm('Delete this expense?')">
+                            <button class="btn btn-sm btn-outline-danger rounded-2 py-0 px-2">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const stackedData = {{ chart_stacked | tojson }};
+const typeData    = {{ chart_types   | tojson }};
+const fuelData    = {{ chart_fuel_eff | tojson }};
+
+const TYPE_COLORS = {{ TYPE_COLORS | tojson }};
+const TYPE_LABELS = {{ TYPE_LABELS | tojson }};
+
+// ── Stacked bar chart ──
+if (stackedData.labels.length > 0) {
+    const datasets = stackedData.types.map(t => ({
+        label: TYPE_LABELS[t],
+        data: stackedData.data[t],
+        backgroundColor: TYPE_COLORS[t] + 'cc',
+        borderColor: TYPE_COLORS[t],
+        borderWidth: 1,
+        borderRadius: 3,
+        borderSkipped: false,
+    }));
+
+    new Chart(document.getElementById('stackedChart'), {
+        type: 'bar',
+        data: { labels: stackedData.labels, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { color: '#6c757d' } },
+                y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6c757d' } }
+            }
+        }
+    });
+}
+
+// ── Doughnut chart ──
+if (typeData.labels.length > 0) {
+    new Chart(document.getElementById('typeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: typeData.labels,
+            datasets: [{
+                data: typeData.data,
+                backgroundColor: typeData.colors,
+                borderWidth: 3,
+                borderColor: '#fff',
+                hoverOffset: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '65%',
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12, font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+// ── Fuel efficiency chart ──
+if (fuelData.labels.length > 0) {
+    new Chart(document.getElementById('fuelEffChart'), {
+        type: 'line',
+        data: {
+            labels: fuelData.labels,
+            datasets: [{
+                label: 'L/100 km',
+                data: fuelData.data,
+                borderColor: '#0dcaf0',
+                backgroundColor: 'rgba(13,202,240,0.1)',
+                borderWidth: 2,
+                pointRadius: 4,
+                pointBackgroundColor: '#0dcaf0',
+                fill: true,
+                tension: 0.3,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#6c757d', maxTicksLimit: 8 } },
+                y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#6c757d' } }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
