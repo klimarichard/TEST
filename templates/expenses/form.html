@@ -55,10 +55,15 @@
 
                     {# ── Common fields ── #}
                     <div class="row g-3 mb-3">
-                        <div class="col-sm-5">
+                        <div class="col-sm-4">
                             <label class="form-label fw-medium small">Date <span class="text-danger">*</span></label>
                             <input type="date" name="date" class="form-control" required
                                    value="{{ expense.date.isoformat() if expense else today }}">
+                        </div>
+                        <div class="col-sm-2" id="time-field-wrapper" style="display:none">
+                            <label class="form-label fw-medium small">Time</label>
+                            <input type="time" name="transaction_time" class="form-control"
+                                   value="{{ expense.fuel_detail.transaction_time.strftime('%H:%M') if expense and expense.fuel_detail and expense.fuel_detail.transaction_time else '' }}">
                         </div>
                         <div class="col-sm-4">
                             <label class="form-label fw-medium small">Amount <span class="text-danger">*</span></label>
@@ -67,7 +72,7 @@
                                    value="{{ expense.amount if expense else '' }}"
                                    placeholder="0.00">
                         </div>
-                        <div class="col-sm-3">
+                        <div class="col-sm-2">
                             <label class="form-label fw-medium small">Currency</label>
                             <select name="currency" id="currencyInput" class="form-select">
                                 {% for c in currencies %}
@@ -118,23 +123,13 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="row g-3 mb-3">
-                            <div class="col-sm-8">
-                                <label class="form-label fw-medium small">Fuel Station Location</label>
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
-                                    <input type="text" name="station_location" class="form-control"
-                                           placeholder="e.g. Shell Praha - Smíchov"
-                                           value="{{ expense.fuel_detail.station_location if expense and expense.fuel_detail and expense.fuel_detail.station_location else '' }}">
-                                </div>
-                            </div>
-                            <div class="col-sm-4">
-                                <label class="form-label fw-medium small">Time</label>
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
-                                    <input type="time" name="transaction_time" class="form-control"
-                                           value="{{ expense.fuel_detail.transaction_time.strftime('%H:%M') if expense and expense.fuel_detail and expense.fuel_detail.transaction_time else '' }}">
-                                </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Fuel Station Location</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+                                <input type="text" name="station_location" class="form-control"
+                                       placeholder="e.g. Shell Praha - Smíchov"
+                                       value="{{ expense.fuel_detail.station_location if expense and expense.fuel_detail and expense.fuel_detail.station_location else '' }}">
                             </div>
                         </div>
                     </div>
@@ -247,6 +242,8 @@ function switchType(type) {
             tab.classList.add('active-' + type);
         }
     });
+    // Show/hide time field
+    document.getElementById('time-field-wrapper').style.display = type === 'fuel' ? '' : 'none';
     // Show/hide field sections
     document.querySelectorAll('.type-fields').forEach(el => el.style.display = 'none');
     const section = document.getElementById('fields-' + type);
@@ -289,6 +286,9 @@ switchType(currentType);
 document.querySelectorAll('.type-fields').forEach(el => el.style.display = 'none');
 const s = document.getElementById('fields-{{ expense.expense_type }}');
 if (s) s.style.display = '';
+if ('{{ expense.expense_type }}' === 'fuel') {
+    document.getElementById('time-field-wrapper').style.display = '';
+}
 {% endif %}
 
 function computePricePerLiter() {
