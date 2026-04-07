@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% block title %}Overview — CarTracker Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-table me-2 text-primary"></i>All Expenses
+    </h4>
+    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary rounded-3">
+        <i class="bi bi-people me-1"></i>Manage Users
+    </a>
+</div>
+
+{# ── Filters ── #}
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="GET" action="{{ url_for('admin_overview') }}" class="row g-2 align-items-end">
+            <div class="col-sm-4">
+                <label class="form-label fw-medium small mb-1">User</label>
+                <select name="user_id" id="filterUser" class="form-select form-select-sm">
+                    <option value="">All users</option>
+                    {% for u in users %}
+                    <option value="{{ u.id }}" {% if sel_user_id == u.id %}selected{% endif %}>
+                        {{ u.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-4">
+                <label class="form-label fw-medium small mb-1">Car</label>
+                <select name="car_id" id="filterCar" class="form-select form-select-sm">
+                    <option value="">All cars</option>
+                    {% for c in all_cars %}
+                    <option value="{{ c.id }}"
+                            data-owner="{{ c.owner_id }}"
+                            data-shared="{{ c.shares | map(attribute='user_id') | join(',') }}"
+                            {% if sel_car_id == c.id %}selected{% endif %}>
+                        {{ c.display_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-auto">
+                <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
+                    <i class="bi bi-funnel me-1"></i>Filter
+                </button>
+                {% if sel_user_id or sel_car_id %}
+                <a href="{{ url_for('admin_overview') }}" class="btn btn-outline-secondary btn-sm rounded-3 ms-1">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{# ── Summary cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <div class="fw-bold fs-4">{{ expenses | length }}</div>
+                <div class="text-muted small">Expenses</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <div class="fw-bold fs-4">{{ total_czk | czk }}</div>
+                <div class="text-muted small">Total</div>
+            </div>
+        </div>
+    </div>
+    {% for t in EXPENSE_TYPES if type_totals.get(t) %}
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <div class="fw-bold fs-5">{{ type_totals[t] | czk }}</div>
+                <div class="text-muted small">
+                    <i class="bi {{ TYPE_ICONS[t] }} me-1" style="color:{{ TYPE_COLORS[t] }}"></i>
+                    {{ TYPE_LABELS[t] }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{# ── Expenses table ── #}
+<div class="card">
+    <div class="card-body p-0">
+        {% if expenses %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="fw-medium px-4">Date</th>
+                        <th class="fw-medium">User</th>
+                        <th class="fw-medium">Car</th>
+                        <th class="fw-medium">Type</th>
+                        <th class="fw-medium d-none d-md-table-cell">Details</th>
+                        <th class="fw-medium text-end pe-4">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for e in expenses %}
+                <tr>
+                    <td class="px-4 text-nowrap">
+                        <span class="fw-medium">{{ e.date.strftime('%d.%m.%Y') }}</span>
+                        {% if e.expense_type == 'fuel' and e.fuel_detail and e.fuel_detail.transaction_time %}
+                        <br><span class="text-muted small">{{ e.fuel_detail.transaction_time.strftime('%H:%M') }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted small">{{ e.user.username }}</td>
+                    <td class="small">
+                        <a href="{{ url_for('car_detail', car_id=e.car_id) }}"
+                           class="text-decoration-none fw-medium">{{ e.car.name }}</a>
+                    </td>
+                    <td>
+                        <span class="badge-type" style="background:{{ TYPE_COLORS[e.expense_type] }}20;color:{{ TYPE_COLORS[e.expense_type] }};border-color:{{ TYPE_COLORS[e.expense_type] }}40">
+                            <i class="bi {{ TYPE_ICONS[e.expense_type] }}"></i>
+                            {{ TYPE_LABELS[e.expense_type] }}
+                        </span>
+                    </td>
+                    <td class="text-muted small d-none d-md-table-cell" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        {% if e.detail %}{{ e.detail.summary }}{% endif %}
+                        {% if e.notes %}<span class="fst-italic">{{ e.notes }}</span>{% endif %}
+                    </td>
+                    <td class="text-end pe-4 text-nowrap fw-medium">
+                        {{ e.amount_czk | czk }}
+                        {% if e.currency != 'CZK' %}
+                        <br><span class="text-muted small fw-normal">{{ e.amount }} {{ e.currency }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+            No expenses found for the selected filters.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// When user filter changes, grey out car options that don't belong to that user
+const userSelect = document.getElementById('filterUser');
+const carSelect  = document.getElementById('filterCar');
+
+userSelect.addEventListener('change', function () {
+    const userId = this.value;
+    Array.from(carSelect.options).forEach(opt => {
+        if (!opt.value) return; // "All cars" option
+        if (!userId) {
+            opt.hidden = false;
+        } else {
+            const owner  = opt.dataset.owner;
+            const shared = opt.dataset.shared ? opt.dataset.shared.split(',') : [];
+            opt.hidden = (owner !== userId && !shared.includes(userId));
+        }
+    });
+    // Reset car selection if currently selected car is now hidden
+    const selected = carSelect.options[carSelect.selectedIndex];
+    if (selected && selected.hidden) carSelect.value = '';
+});
+
+// Trigger on load if user is pre-selected
+if (userSelect.value) userSelect.dispatchEvent(new Event('change'));
+</script>
+{% endblock %}

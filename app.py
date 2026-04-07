@@ -401,6 +401,8 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    if current_user.is_admin:
+        return redirect(url_for('admin_overview'))
     from collections import defaultdict
     cars = current_user.get_accessible_cars()
     car_ids = [c.id for c in cars]
@@ -457,6 +459,9 @@ def cars_list():
 @app.route('/cars/new', methods=['GET', 'POST'])
 @login_required
 def car_new():
+    if current_user.is_admin:
+        flash('Admin accounts cannot own cars.', 'warning')
+        return redirect(url_for('admin_overview'))
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         if not name:
@@ -788,6 +793,49 @@ def expense_delete(expense_id):
 # ─────────────────────────────────────────────────────────────────────────────
 # Admin
 # ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/admin/overview')
+@admin_required
+def admin_overview():
+    from collections import defaultdict
+    users = User.query.filter_by(is_admin=False).order_by(User.username).all()
+    cars  = Car.query.order_by(Car.name).all()
+
+    sel_user_id = request.args.get('user_id', type=int)
+    sel_car_id  = request.args.get('car_id',  type=int)
+
+    q = Expense.query
+    if sel_user_id:
+        q = q.filter(Expense.user_id == sel_user_id)
+    if sel_car_id:
+        q = q.filter(Expense.car_id == sel_car_id)
+    expenses = q.order_by(Expense.date.desc(), Expense.created_at.desc()).all()
+
+    type_totals: dict = defaultdict(float)
+    for e in expenses:
+        type_totals[e.expense_type] += e.amount_czk
+
+    # For car dropdown: if a user is selected show only their cars
+    if sel_user_id:
+        user_car_ids = (
+            [c.id for c in Car.query.filter_by(owner_id=sel_user_id).all()] +
+            [s.car_id for s in CarShare.query.filter_by(user_id=sel_user_id).all()]
+        )
+        filtered_cars = [c for c in cars if c.id in user_car_ids]
+    else:
+        filtered_cars = cars
+
+    return render_template('admin/overview.html',
+        users=users,
+        cars=filtered_cars,
+        all_cars=cars,
+        expenses=expenses,
+        sel_user_id=sel_user_id,
+        sel_car_id=sel_car_id,
+        total_czk=sum(e.amount_czk for e in expenses),
+        type_totals=dict(type_totals),
+    )
+
 
 @app.route('/admin')
 @admin_required
