@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% block title %}Account Settings — CarTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-gear me-2 text-primary"></i>Account Settings
+    </h4>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+
+        {# ── Email ── #}
+        <div class="card mb-4">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-envelope me-2 text-primary"></i>Email Address</h6>
+                <form method="POST">
+                    <input type="hidden" name="action" value="update_email">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">Email</label>
+                        <input type="email" name="email" class="form-control"
+                               value="{{ current_user.email }}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
+                        <i class="bi bi-check-lg me-1"></i>Save
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {# ── Password ── #}
+        <div class="card mb-4">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-lock me-2 text-primary"></i>Change Password</h6>
+                <form method="POST">
+                    <input type="hidden" name="action" value="update_password">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">Current Password</label>
+                        <input type="password" name="current_password" class="form-control" required autocomplete="current-password">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">New Password</label>
+                        <input type="password" name="new_password" class="form-control" required autocomplete="new-password" minlength="6">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">Confirm New Password</label>
+                        <input type="password" name="confirm_password" class="form-control" required autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
+                        <i class="bi bi-check-lg me-1"></i>Update Password
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+    <div class="col-lg-6">
+
+        {# ── Username ── #}
+        <div class="card mb-4">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-person me-2 text-primary"></i>Username</h6>
+                <div class="mb-3">
+                    <label class="form-label small fw-medium">Current Username</label>
+                    <input type="text" class="form-control" value="{{ current_user.username }}" disabled>
+                </div>
+                {% if current_user.pending_username %}
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="bi bi-hourglass-split me-1"></i>
+                    Change to <strong>{{ current_user.pending_username }}</strong> is pending admin approval.
+                    {% if current_user.pending_username_at %}
+                    <span class="text-muted">(requested {{ current_user.pending_username_at.strftime('%d.%m.%Y') }})</span>
+                    {% endif %}
+                </div>
+                <form method="POST">
+                    <input type="hidden" name="action" value="cancel_username_request">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm rounded-3">
+                        <i class="bi bi-x-lg me-1"></i>Cancel Request
+                    </button>
+                </form>
+                {% else %}
+                <form method="POST">
+                    <input type="hidden" name="action" value="request_username">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium">Request New Username</label>
+                        <input type="text" name="new_username" class="form-control"
+                               placeholder="Desired username" minlength="2" maxlength="80">
+                        <div class="form-text">Username changes require admin approval.</div>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary btn-sm rounded-3 px-3">
+                        <i class="bi bi-send me-1"></i>Submit Request
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ── Appearance ── #}
+        <div class="card mb-4">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-palette me-2 text-primary"></i>Appearance</h6>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="fw-medium small">Dark Mode</div>
+                        <div class="text-muted" style="font-size:0.8rem">
+                            Use the <i class="bi bi-moon"></i> button in the navbar to toggle instantly.
+                            Current preference: <strong>{{ current_user.theme | capitalize }}</strong>.
+                        </div>
+                    </div>
+                    <div class="form-check form-switch ms-3 mb-0">
+                        <input class="form-check-input" type="checkbox" id="themeSwitch" role="switch"
+                               style="width:2.5em;height:1.4em;cursor:pointer"
+                               {{ 'checked' if current_user.theme == 'dark' }}>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Account info ── #}
+        <div class="card">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Account Info</h6>
+                <div class="text-muted small">
+                    <div class="mb-1">Member since: <strong>{{ current_user.created_at.strftime('%d.%m.%Y') }}</strong></div>
+                    <div>Role: <strong>{{ 'Admin' if current_user.is_admin else 'User' }}</strong></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Sync the in-page dark mode switch with the navbar toggle
+document.getElementById('themeSwitch').addEventListener('change', function () {
+    const newTheme = this.checked ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-bs-theme', newTheme);
+    const navIcon = document.querySelector('#themeToggleBtn i');
+    if (navIcon) navIcon.className = newTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon';
+    const token = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('{{ url_for("account_theme") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'csrf_token=' + encodeURIComponent(token) + '&theme=' + newTheme
+    });
+});
+</script>
+{% endblock %}

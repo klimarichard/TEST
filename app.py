@@ -45,6 +45,9 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
+    theme = db.Column(db.String(10), default='light', nullable=False)
+    pending_username = db.Column(db.String(80), nullable=True)
+    pending_username_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     owned_cars = db.relationship('Car', backref='owner', lazy=True)
@@ -314,12 +317,16 @@ def format_czk(value):
 
 @app.context_processor
 def inject_globals():
+    pending_count = 0
+    if current_user.is_authenticated and current_user.is_admin:
+        pending_count = User.query.filter(User.pending_username.isnot(None)).count()
     return {
         'now': datetime.utcnow(),
         'TYPE_COLORS': TYPE_COLORS,
         'TYPE_LABELS': TYPE_LABELS,
         'TYPE_ICONS': TYPE_ICONS,
         'EXPENSE_TYPES': EXPENSE_TYPES,
+        'pending_username_count': pending_count,
     }
 
 
@@ -392,6 +399,74 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
+
+
+@app.route('/account', methods=['GET', 'POST'])
+@login_required
+def account():
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'update_email':
+            email = request.form.get('email', '').strip()
+            if not email:
+                flash('Email is required.', 'danger')
+            elif User.query.filter(User.email == email, User.id != current_user.id).first():
+                flash('That email is already in use.', 'danger')
+            else:
+                current_user.email = email
+                db.session.commit()
+                flash('Email updated.', 'success')
+
+        elif action == 'update_password':
+            current_pw = request.form.get('current_password', '')
+            new_pw = request.form.get('new_password', '')
+            confirm_pw = request.form.get('confirm_password', '')
+            if not current_user.check_password(current_pw):
+                flash('Current password is incorrect.', 'danger')
+            elif len(new_pw) < 6:
+                flash('New password must be at least 6 characters.', 'danger')
+            elif new_pw != confirm_pw:
+                flash('Passwords do not match.', 'danger')
+            else:
+                current_user.set_password(new_pw)
+                db.session.commit()
+                flash('Password updated.', 'success')
+
+        elif action == 'request_username':
+            new_username = request.form.get('new_username', '').strip()
+            if not new_username:
+                flash('Username is required.', 'danger')
+            elif new_username == current_user.username:
+                flash('That is already your username.', 'warning')
+            elif User.query.filter(
+                (User.username == new_username) | (User.pending_username == new_username)
+            ).filter(User.id != current_user.id).first():
+                flash('That username is already taken or pending approval.', 'danger')
+            else:
+                current_user.pending_username = new_username
+                current_user.pending_username_at = datetime.utcnow()
+                db.session.commit()
+                flash('Username change request submitted. Awaiting admin approval.', 'info')
+
+        elif action == 'cancel_username_request':
+            current_user.pending_username = None
+            current_user.pending_username_at = None
+            db.session.commit()
+            flash('Username change request cancelled.', 'info')
+
+        return redirect(url_for('account'))
+    return render_template('account.html')
+
+
+@app.route('/account/theme', methods=['POST'])
+@login_required
+def account_theme():
+    theme = request.form.get('theme', 'light')
+    if theme in ('light', 'dark'):
+        current_user.theme = theme
+        db.session.commit()
+    return ('', 204)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -907,11 +982,43 @@ def admin_user_detail(user_id):
     )
 
 
+@app.route('/admin/requests/<int:user_id>/approve', methods=['POST'])
+@admin_required
+def admin_approve_username(user_id):
+    user = User.query.get_or_404(user_id)
+    if not user.pending_username:
+        flash('No pending request.', 'warning')
+        return redirect(url_for('admin_index'))
+    if User.query.filter_by(username=user.pending_username).first():
+        flash(f'Username "{user.pending_username}" is already taken. Request denied.', 'danger')
+        user.pending_username = None
+        user.pending_username_at = None
+    else:
+        flash(f'Username changed to "{user.pending_username}".', 'success')
+        user.username = user.pending_username
+        user.pending_username = None
+        user.pending_username_at = None
+    db.session.commit()
+    return redirect(url_for('admin_index'))
+
+
+@app.route('/admin/requests/<int:user_id>/deny', methods=['POST'])
+@admin_required
+def admin_deny_username(user_id):
+    user = User.query.get_or_404(user_id)
+    user.pending_username = None
+    user.pending_username_at = None
+    db.session.commit()
+    flash('Username change request denied.', 'info')
+    return redirect(url_for('admin_index'))
+
+
 @app.route('/admin')
 @admin_required
 def admin_index():
+    pending_users = User.query.filter(User.pending_username.isnot(None)).order_by(User.pending_username_at).all()
     users = User.query.order_by(User.username).all()
-    return render_template('admin/index.html', users=users)
+    return render_template('admin/index.html', users=users, pending_users=pending_users)
 
 
 @app.route('/admin/users/new', methods=['GET', 'POST'])

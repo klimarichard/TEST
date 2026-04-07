@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="{{ current_user.theme if current_user.is_authenticated else 'light' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -37,6 +37,9 @@
                     <a class="nav-link {% if request.endpoint == 'admin_index' %}active{% endif %}"
                        href="{{ url_for('admin_index') }}">
                         <i class="bi bi-shield-lock me-1"></i>Users
+                        {% if pending_username_count %}
+                        <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem">{{ pending_username_count }}</span>
+                        {% endif %}
                     </a>
                 </li>
                 {% else %}
@@ -54,7 +57,13 @@
                 </li>
                 {% endif %}
             </ul>
-            <ul class="navbar-nav">
+            <ul class="navbar-nav align-items-center gap-1">
+                <li class="nav-item">
+                    <button id="themeToggleBtn" class="btn btn-link nav-link px-2"
+                            title="Toggle dark mode" style="font-size:1.1rem">
+                        <i class="bi {{ 'bi-sun' if current_user.is_authenticated and current_user.theme == 'dark' else 'bi-moon' }}"></i>
+                    </button>
+                </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                         <i class="bi bi-person-circle me-1"></i>{{ current_user.username }}
@@ -63,6 +72,11 @@
                         {% endif %}
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3">
+                        <li>
+                            <a class="dropdown-item" href="{{ url_for('account') }}">
+                                <i class="bi bi-gear me-2"></i>Account Settings
+                            </a>
+                        </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
@@ -116,5 +130,22 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% block scripts %}{% endblock %}
+{% if current_user.is_authenticated %}
+<script>
+document.getElementById('themeToggleBtn').addEventListener('click', function () {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-bs-theme') === 'dark';
+    const newTheme = isDark ? 'light' : 'dark';
+    html.setAttribute('data-bs-theme', newTheme);
+    this.querySelector('i').className = newTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon';
+    const token = document.querySelector('meta[name="csrf-token"]').content;
+    fetch('{{ url_for("account_theme") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'csrf_token=' + encodeURIComponent(token) + '&theme=' + newTheme
+    });
+});
+</script>
+{% endif %}
 </body>
 </html>
