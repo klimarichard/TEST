@@ -6,15 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 pip install -r requirements.txt
-python3 -m flask run --port 5001   # port 5000 is taken by macOS AirPlay
+python3 -m flask run --port 5001 --debug   # --debug enables auto-reload for code and templates
 ```
 
-The SQLite database (`instance/carexpenses.db`) is created automatically on first run.
+Apply database migrations before first run (also creates the DB if it doesn't exist):
+```bash
+python3 -m flask db upgrade
+```
 
 To create the first admin user:
 ```bash
 python3 -m flask create-admin USERNAME EMAIL PASSWORD
 ```
+
+### Schema changes workflow
+
+When you add or change a model, generate a migration and apply it:
+```bash
+python3 -m flask db migrate -m "describe the change"
+python3 -m flask db upgrade
+```
+
+Commit the generated file in `migrations/versions/` alongside the code change. Railway runs `flask db upgrade` automatically on every deploy (see `Procfile`).
 
 Use `python3 -m flask` instead of `flask` — the `flask` binary is not on PATH.
 

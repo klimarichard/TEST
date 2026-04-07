@@ -6,6 +6,7 @@ from functools import wraps
 from flask import (Flask, render_template, redirect, url_for, request,
                    flash, jsonify, abort)
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from flask_login import (LoginManager, UserMixin, login_user, logout_user,
                          login_required, current_user)
 from flask_wtf.csrf import CSRFProtect
@@ -26,6 +27,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -916,7 +918,6 @@ def init_db_command():
 @click.argument('password')
 def create_admin_command(username, email, password):
     """Create an admin user.  Usage: flask create-admin USERNAME EMAIL PASSWORD"""
-    db.create_all()
     if User.query.filter_by(username=username).first():
         click.echo(f'Error: user "{username}" already exists.', err=True)
         return
@@ -927,12 +928,7 @@ def create_admin_command(username, email, password):
     click.echo(f'Admin user "{username}" created.')
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bootstrap DB on startup
-# ─────────────────────────────────────────────────────────────────────────────
-
-with app.app_context():
-    db.create_all()
+# DB is managed by Flask-Migrate. Run `flask db upgrade` to apply migrations.
 
 if __name__ == '__main__':
     app.run(debug=True)
