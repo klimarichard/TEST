@@ -343,10 +343,35 @@ def index():
     return redirect(url_for('dashboard') if current_user.is_authenticated else url_for('login'))
 
 
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    if User.query.first():
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm_password', '')
+        if not username or not email or not password:
+            flash('All fields are required.', 'danger')
+        elif password != confirm:
+            flash('Passwords do not match.', 'danger')
+        else:
+            user = User(username=username, email=email, is_admin=True)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            flash('Admin account created. Please sign in.', 'success')
+            return redirect(url_for('login'))
+    return render_template('setup.html')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
+    if not User.query.first():
+        return redirect(url_for('setup'))
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
