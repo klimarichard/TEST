@@ -63,18 +63,19 @@
                         </button>
                         <a href="{{ url_for('car_detail', car_id=car.id) if car else url_for('cars_list') }}"
                            class="btn btn-outline-secondary rounded-3">Cancel</a>
-
-                        {% if car and car.owner_id == current_user.id %}
-                        <form method="POST" action="{{ url_for('car_delete', car_id=car.id) }}"
-                              class="ms-auto"
-                              onsubmit="return confirm('Delete {{ car.name }}? This will also delete all its expenses.')">
-                            <button type="submit" class="btn btn-outline-danger rounded-3 btn-sm">
-                                <i class="bi bi-trash me-1"></i>Delete Car
-                            </button>
-                        </form>
-                        {% endif %}
                     </div>
                 </form>
+
+                {% if car and car.owner_id == current_user.id %}
+                <form method="POST" action="{{ url_for('car_delete', car_id=car.id) }}"
+                      class="mt-2"
+                      onsubmit="return confirm('Delete {{ car.name }}? This will also delete all its expenses.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger rounded-3 btn-sm">
+                        <i class="bi bi-trash me-1"></i>Delete Car
+                    </button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </div>

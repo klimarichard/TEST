@@ -167,6 +167,7 @@ class FuelDetail(db.Model):
     price_per_liter = db.Column(db.Float)
     odometer = db.Column(db.Integer)
     station_location = db.Column(db.String(200))
+    transaction_time = db.Column(db.Time)
 
     @property
     def summary(self):
@@ -660,6 +661,11 @@ def _apply_type_detail(expense, form):
         except (ValueError, TypeError):
             d.liters = d.price_per_liter = d.odometer = None
         d.station_location = form.get('station_location', '').strip() or None
+        time_str = form.get('transaction_time', '').strip()
+        try:
+            d.transaction_time = datetime.strptime(time_str, '%H:%M').time() if time_str else None
+        except ValueError:
+            d.transaction_time = None
         if not expense.fuel_detail:
             db.session.add(d)
 

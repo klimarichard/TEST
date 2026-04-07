@@ -118,13 +118,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-medium small">Fuel Station Location</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
-                                <input type="text" name="station_location" class="form-control"
-                                       placeholder="e.g. Shell Praha - Smíchov"
-                                       value="{{ expense.fuel_detail.station_location if expense and expense.fuel_detail and expense.fuel_detail.station_location else '' }}">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-8">
+                                <label class="form-label fw-medium small">Fuel Station Location</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+                                    <input type="text" name="station_location" class="form-control"
+                                           placeholder="e.g. Shell Praha - Smíchov"
+                                           value="{{ expense.fuel_detail.station_location if expense and expense.fuel_detail and expense.fuel_detail.station_location else '' }}">
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="form-label fw-medium small">Time</label>
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
+                                    <input type="time" name="transaction_time" class="form-control"
+                                           value="{{ expense.fuel_detail.transaction_time.strftime('%H:%M') if expense and expense.fuel_detail and expense.fuel_detail.transaction_time else '' }}">
+                                </div>
                             </div>
                         </div>
                     </div>
