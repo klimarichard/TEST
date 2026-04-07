@@ -45,6 +45,14 @@
     </div>
 </div>
 
+{% if is_admin_view %}
+<div class="alert alert-warning rounded-3 py-2 px-3 mb-3 small">
+    <i class="bi bi-shield-exclamation me-2"></i>
+    <strong>Admin view</strong> — you are viewing a car owned by <strong>{{ car.owner.username }}</strong>.
+    Edits and deletions here affect real user data.
+</div>
+{% endif %}
+
 {# ── Insurance warnings ── #}
 {% for e in insurance_warnings %}
 <div class="insurance-warning mb-2 d-flex align-items-center gap-2">

@@ -1,10 +1,13 @@
 import os
 import click
 import requests
+from io import BytesIO
 from datetime import datetime, date
 from functools import wraps
 from flask import (Flask, render_template, redirect, url_for, request,
-                   flash, jsonify, abort)
+                   flash, jsonify, abort, send_file)
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import (LoginManager, UserMixin, login_user, logout_user,
@@ -144,7 +147,7 @@ class Expense(db.Model):
     gadget_detail = db.relationship('GadgetDetail', backref='expense', uselist=False, cascade='all, delete-orphan')
 
     def can_edit(self, user):
-        return self.user_id == user.id or self.car.owner_id == user.id
+        return user.is_admin or self.user_id == user.id or self.car.owner_id == user.id
 
     @property
     def type_label(self):
@@ -313,6 +316,56 @@ def format_czk(value):
         return '—'
     formatted = f'{value:,.0f}'.replace(',', '\u202f')  # narrow no-break space (CZ thousands sep)
     return f'{formatted}\u00a0Kč'
+
+
+def _export_xlsx(expenses, include_user=False, filename='expenses'):
+    """Build and return an xlsx response for a list of expenses."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Expenses'
+
+    header_font = Font(bold=True)
+    header_fill = PatternFill('solid', fgColor='D9E1F2')
+
+    headers = ['Date', 'Time', 'Car']
+    if include_user:
+        headers.append('User')
+    headers += ['Type', 'Details', 'Amount (CZK)', 'Orig. Amount', 'Currency', 'Notes']
+    ws.append(headers)
+    for col, cell in enumerate(ws[1], 1):
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center')
+
+    for e in expenses:
+        time_str = ''
+        if e.expense_type == 'fuel' and e.fuel_detail and e.fuel_detail.transaction_time:
+            time_str = e.fuel_detail.transaction_time.strftime('%H:%M')
+        detail_str = e.detail.summary if e.detail else ''
+        row = [e.date.strftime('%d.%m.%Y'), time_str, e.car.name]
+        if include_user:
+            row.append(e.user.username)
+        row += [
+            TYPE_LABELS.get(e.expense_type, e.expense_type),
+            detail_str,
+            round(e.amount_czk, 2),
+            e.amount if e.currency != 'CZK' else '',
+            e.currency if e.currency != 'CZK' else '',
+            e.notes or '',
+        ]
+        ws.append(row)
+
+    # Auto-fit column widths (approximate)
+    for col in ws.columns:
+        max_len = max((len(str(cell.value or '')) for cell in col), default=8)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name=f'{filename}.xlsx',
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 @app.context_processor
@@ -521,12 +574,61 @@ def dashboard():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# User expense list
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/expenses')
+@login_required
+def expense_list():
+    if current_user.is_admin:
+        return redirect(url_for('admin_overview'))
+    from collections import defaultdict
+    cars = current_user.get_accessible_cars()
+    sel_car_ids = request.args.getlist('car_id', type=int)
+
+    car_ids = [c.id for c in cars]
+    q = Expense.query.filter(Expense.car_id.in_(car_ids)) if car_ids else Expense.query.filter(False)
+    if sel_car_ids:
+        q = q.filter(Expense.car_id.in_(sel_car_ids))
+    expenses = q.order_by(Expense.date.desc(), Expense.created_at.desc()).all()
+
+    type_totals: dict = defaultdict(float)
+    for e in expenses:
+        type_totals[e.expense_type] += e.amount_czk
+
+    return render_template('expenses/list.html',
+        cars=cars,
+        expenses=expenses,
+        sel_car_ids=sel_car_ids,
+        total_czk=sum(e.amount_czk for e in expenses),
+        type_totals=dict(type_totals),
+    )
+
+
+@app.route('/expenses/export')
+@login_required
+def expense_export():
+    if current_user.is_admin:
+        return redirect(url_for('admin_overview_export'))
+    cars = current_user.get_accessible_cars()
+    sel_car_ids = request.args.getlist('car_id', type=int)
+    car_ids = [c.id for c in cars]
+    q = Expense.query.filter(Expense.car_id.in_(car_ids)) if car_ids else Expense.query.filter(False)
+    if sel_car_ids:
+        q = q.filter(Expense.car_id.in_(sel_car_ids))
+    expenses = q.order_by(Expense.date.desc(), Expense.created_at.desc()).all()
+    return _export_xlsx(expenses, include_user=False, filename='my_expenses')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Cars
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/cars')
 @login_required
 def cars_list():
+    if current_user.is_admin:
+        return redirect(url_for('admin_overview'))
     cars = current_user.get_accessible_cars()
     return render_template('cars/list.html', cars=cars)
 
@@ -562,8 +664,9 @@ def car_new():
 def car_detail(car_id):
     from collections import defaultdict
     car = Car.query.get_or_404(car_id)
-    if not car.is_accessible_by(current_user):
+    if not current_user.is_admin and not car.is_accessible_by(current_user):
         abort(403)
+    is_admin_view = current_user.is_admin and car.owner_id != current_user.id
 
     expenses = (Expense.query
                 .filter_by(car_id=car_id)
@@ -604,7 +707,8 @@ def car_detail(car_id):
     return render_template('cars/detail.html',
         car=car,
         expenses=expenses,
-        is_owner=(car.owner_id == current_user.id),
+        is_owner=(current_user.is_admin or car.owner_id == current_user.id),
+        is_admin_view=is_admin_view,
         total_spent=sum(e.amount_czk for e in expenses),
         insurance_warnings=insurance_warnings,
         chart_stacked={
@@ -625,8 +729,10 @@ def car_detail(car_id):
 @login_required
 def car_edit(car_id):
     car = Car.query.get_or_404(car_id)
-    if car.owner_id != current_user.id:
+    if not current_user.is_admin and car.owner_id != current_user.id:
         abort(403)
+    if current_user.is_admin and car.owner_id != current_user.id:
+        flash(f'Admin override: editing car owned by {car.owner.username}.', 'warning')
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         if not name:
@@ -647,7 +753,7 @@ def car_edit(car_id):
 @login_required
 def car_delete(car_id):
     car = Car.query.get_or_404(car_id)
-    if car.owner_id != current_user.id:
+    if not current_user.is_admin and car.owner_id != current_user.id:
         abort(403)
     name = car.name
     db.session.delete(car)
@@ -660,7 +766,7 @@ def car_delete(car_id):
 @login_required
 def car_share(car_id):
     car = Car.query.get_or_404(car_id)
-    if car.owner_id != current_user.id:
+    if not current_user.is_admin and car.owner_id != current_user.id:
         abort(403)
     if request.method == 'POST':
         action = request.form.get('action')
@@ -955,6 +1061,20 @@ def admin_overview():
         type_totals=dict(type_totals),
         expense_details=expense_details,
     )
+
+
+@app.route('/admin/overview/export')
+@admin_required
+def admin_overview_export():
+    sel_user_ids = request.args.getlist('user_id', type=int)
+    sel_car_ids  = request.args.getlist('car_id',  type=int)
+    q = Expense.query
+    if sel_user_ids:
+        q = q.filter(Expense.user_id.in_(sel_user_ids))
+    if sel_car_ids:
+        q = q.filter(Expense.car_id.in_(sel_car_ids))
+    expenses = q.order_by(Expense.date.desc(), Expense.created_at.desc()).all()
+    return _export_xlsx(expenses, include_user=True, filename='expenses_export')
 
 
 @app.route('/admin/users/<int:user_id>')

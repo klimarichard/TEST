@@ -6,9 +6,15 @@
     <h4 class="fw-bold mb-0">
         <i class="bi bi-table me-2 text-primary"></i>All Expenses
     </h4>
-    <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary rounded-3">
-        <i class="bi bi-people me-1"></i>Manage Users
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('admin_overview_export', **request.args) }}"
+           class="btn btn-sm btn-outline-success rounded-3">
+            <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+        </a>
+        <a href="{{ url_for('admin_index') }}" class="btn btn-sm btn-outline-secondary rounded-3">
+            <i class="bi bi-people me-1"></i>Manage Users
+        </a>
+    </div>
 </div>
 
 {# ── Filters ── #}

@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% block title %}My Expenses — CarTracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-receipt me-2 text-primary"></i>My Expenses
+    </h4>
+    <a href="{{ url_for('expense_export', **request.args) }}"
+       class="btn btn-sm btn-outline-success rounded-3">
+        <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+    </a>
+</div>
+
+{# ── Car filter ── #}
+{% if cars %}
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="GET" action="{{ url_for('expense_list') }}">
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div>
+                    <div class="small fw-medium mb-1">Cars</div>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 dropdown-toggle"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <span id="carLabel">All</span>
+                        </button>
+                        <div class="dropdown-menu p-2 shadow-sm" style="min-width:200px">
+                            {% for c in cars %}
+                            <div class="form-check">
+                                <input class="form-check-input car-check" type="checkbox"
+                                       name="car_id" value="{{ c.id }}" id="cc_{{ c.id }}"
+                                       {% if c.id in sel_car_ids %}checked{% endif %}>
+                                <label class="form-check-label small" for="cc_{{ c.id }}">
+                                    {{ c.display_name }}
+                                    {% if c.owner_id != current_user.id %}
+                                    <span class="text-muted">(shared)</span>
+                                    {% endif %}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
+                    <i class="bi bi-funnel me-1"></i>Apply
+                </button>
+                {% if sel_car_ids %}
+                <a href="{{ url_for('expense_list') }}" class="btn btn-outline-secondary btn-sm rounded-3">
+                    <i class="bi bi-x-lg me-1"></i>Clear
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{# ── Summary cards ── #}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <div class="fw-bold fs-4">{{ expenses | length }}</div>
+                <div class="text-muted small">Expenses</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <div class="fw-bold fs-4">{{ total_czk | czk }}</div>
+                <div class="text-muted small">Total</div>
+            </div>
+        </div>
+    </div>
+    {% for t in EXPENSE_TYPES if type_totals.get(t) %}
+    <div class="col-6 col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <div class="fw-bold fs-5">{{ type_totals[t] | czk }}</div>
+                <div class="text-muted small">
+                    <i class="bi {{ TYPE_ICONS[t] }} me-1" style="color:{{ TYPE_COLORS[t] }}"></i>
+                    {{ TYPE_LABELS[t] }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{# ── Expense table ── #}
+<div class="card">
+    <div class="card-body p-0">
+        {% if expenses %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="fw-medium px-4">Date</th>
+                        <th class="fw-medium">Car</th>
+                        <th class="fw-medium">Type</th>
+                        <th class="fw-medium d-none d-md-table-cell">Details</th>
+                        <th class="fw-medium text-end pe-4">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for e in expenses %}
+                <tr>
+                    <td class="px-4 text-nowrap">
+                        <span class="fw-medium">{{ e.date.strftime('%d.%m.%Y') }}</span>
+                        {% if e.expense_type == 'fuel' and e.fuel_detail and e.fuel_detail.transaction_time %}
+                        <br><span class="text-muted small">{{ e.fuel_detail.transaction_time.strftime('%H:%M') }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small fw-medium">
+                        <a href="{{ url_for('car_detail', car_id=e.car_id) }}"
+                           class="text-decoration-none">{{ e.car.name }}</a>
+                    </td>
+                    <td>
+                        <span class="badge-type" style="background:{{ TYPE_COLORS[e.expense_type] }}20;color:{{ TYPE_COLORS[e.expense_type] }};border-color:{{ TYPE_COLORS[e.expense_type] }}40">
+                            <i class="bi {{ TYPE_ICONS[e.expense_type] }}"></i>
+                            {{ TYPE_LABELS[e.expense_type] }}
+                        </span>
+                    </td>
+                    <td class="text-muted small d-none d-md-table-cell"
+                        style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        {% if e.detail %}{{ e.detail.summary }}{% endif %}
+                        {% if e.notes %}<span class="fst-italic"> · {{ e.notes }}</span>{% endif %}
+                    </td>
+                    <td class="text-end pe-4 text-nowrap fw-medium">
+                        {{ e.amount_czk | czk }}
+                        {% if e.currency != 'CZK' %}
+                        <br><span class="text-muted small fw-normal">{{ e.amount }} {{ e.currency }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+            No expenses found.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateCarLabel() {
+    const checked = document.querySelectorAll('.car-check:checked');
+    const label = document.getElementById('carLabel');
+    if (checked.length === 0) label.textContent = 'All';
+    else if (checked.length === 1)
+        label.textContent = checked[0].closest('.form-check').querySelector('label').textContent.trim();
+    else label.textContent = checked.length + ' selected';
+}
+document.querySelectorAll('.car-check').forEach(cb => cb.addEventListener('change', updateCarLabel));
+updateCarLabel();
+</script>
+{% endblock %}
