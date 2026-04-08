@@ -6,9 +6,22 @@
     <h4 class="fw-bold mb-0">
         <i class="bi bi-speedometer2 me-2 text-primary"></i>Dashboard
     </h4>
-    <a href="{{ url_for('car_new') }}" class="btn btn-primary btn-sm rounded-3">
-        <i class="bi bi-plus-lg me-1"></i>Add Car
-    </a>
+    <div class="d-flex gap-2">
+        {% if cars | length == 1 %}
+        <a href="{{ url_for('expense_new', car_id=cars[0].id) }}"
+           class="btn btn-success btn-sm rounded-3">
+            <i class="bi bi-plus-lg me-1"></i>Add Expense
+        </a>
+        {% elif cars | length > 1 %}
+        <button type="button" class="btn btn-success btn-sm rounded-3"
+                data-bs-toggle="modal" data-bs-target="#addExpenseModal">
+            <i class="bi bi-plus-lg me-1"></i>Add Expense
+        </button>
+        {% endif %}
+        <a href="{{ url_for('car_new') }}" class="btn btn-primary btn-sm rounded-3">
+            <i class="bi bi-plus-lg me-1"></i>Add Car
+        </a>
+    </div>
 </div>
 
 {# ── Stat cards ── #}
@@ -107,40 +120,92 @@
 {% endif %}
 
 {# ── Per-car cards ── #}
-<h6 class="fw-semibold text-muted mb-3">Your Cars</h6>
+<h6 class="fw-semibold text-muted mb-3">
+    Your Cars
+    {% if hidden_count %}
+    <a href="{{ url_for('cars_list') }}" class="text-muted fw-normal fs-6 ms-2"
+       style="font-size:0.8rem!important">
+        <i class="bi bi-eye-slash me-1"></i>{{ hidden_count }} hidden
+    </a>
+    {% endif %}
+</h6>
 <div class="row g-3 mb-4">
     {% for car in cars %}
     <div class="col-md-6 col-lg-4">
-        <a href="{{ url_for('car_detail', car_id=car.id) }}" class="text-decoration-none">
-            <div class="card card-hover h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div>
-                            <div class="fw-bold">{{ car.name }}</div>
-                            {% if car.make %}
-                            <div class="text-muted small">
-                                {{ car.make }}{% if car.model_name %} {{ car.model_name }}{% endif %}
-                                {% if car.year %} ({{ car.year }}){% endif %}
-                            </div>
-                            {% endif %}
-                            {% if car.license_plate %}
-                            <span class="badge bg-secondary-subtle text-body border mt-1 small">{{ car.license_plate }}</span>
-                            {% endif %}
+        <div class="card card-hover h-100 position-relative">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div style="min-width:0">
+                        <a href="{{ url_for('car_detail', car_id=car.id) }}"
+                           class="stretched-link text-decoration-none text-body fw-bold">{{ car.name }}</a>
+                        {% if car.make %}
+                        <div class="text-muted small">
+                            {{ car.make }}{% if car.model_name %} {{ car.model_name }}{% endif %}
+                            {% if car.year %} ({{ car.year }}){% endif %}
                         </div>
+                        {% endif %}
+                        {% if car.license_plate %}
+                        <span class="badge bg-secondary-subtle text-body border mt-1 small">{{ car.license_plate }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex align-items-center gap-1 flex-shrink-0 ms-2"
+                         style="position:relative;z-index:2">
                         {% if car.owner_id == current_user.id %}
                         <span class="badge bg-primary-subtle text-primary rounded-pill small">Owner</span>
                         {% else %}
                         <span class="badge bg-secondary-subtle text-secondary rounded-pill small">Shared</span>
                         {% endif %}
-                    </div>
-                    <hr class="my-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Total spent</span>
-                        <span class="fw-bold">{{ car_totals[car.id] | czk }}</span>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-secondary rounded-circle p-0"
+                                style="width:26px;height:26px;line-height:1"
+                                data-bs-toggle="modal"
+                                data-bs-target="#hideModal{{ car.id }}"
+                                title="Mark as not used">
+                            <i class="bi bi-eye-slash" style="font-size:0.7rem"></i>
+                        </button>
                     </div>
                 </div>
+                <hr class="my-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-muted small">Total spent</span>
+                    <span class="fw-bold">{{ car_totals[car.id] | czk }}</span>
+                </div>
             </div>
-        </a>
+        </div>
+    </div>
+
+    {# Hide confirmation modal for this car #}
+    <div class="modal fade" id="hideModal{{ car.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content rounded-4 border-0 shadow">
+                <div class="modal-header border-0 pb-1">
+                    <h6 class="modal-title fw-bold">Mark as not used</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pt-1 pb-2">
+                    <p class="small mb-2">Hide <strong>{{ car.name }}</strong> from your dashboard?
+                    You can restore it any time from <em>My Cars</em>.</p>
+                    <form method="POST" action="{{ url_for('car_hide', car_id=car.id) }}">
+                        {% if car.owner_id == current_user.id and car.shares %}
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox"
+                                   name="hide_globally" id="hideGlobal{{ car.id }}">
+                            <label class="form-check-label small" for="hideGlobal{{ car.id }}">
+                                Also hide from all shared users
+                            </label>
+                        </div>
+                        {% endif %}
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-warning btn-sm rounded-3 flex-grow-1">
+                                <i class="bi bi-eye-slash me-1"></i>Hide
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-3"
+                                    data-bs-dismiss="modal">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
     {% endfor %}
 </div>
@@ -192,6 +257,36 @@
 </div>
 {% endif %}
 
+{% endif %}
+
+{# ── Add Expense — car selection modal (shown when user has multiple visible cars) ── #}
+{% if cars | length > 1 %}
+<div class="modal fade" id="addExpenseModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-receipt me-2 text-primary"></i>Add Expense — Select Car
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body pt-1">
+                <div class="d-grid gap-2">
+                    {% for car in cars %}
+                    <a href="{{ url_for('expense_new', car_id=car.id) }}"
+                       class="btn btn-outline-secondary rounded-3 text-start">
+                        <i class="bi bi-car-front me-2 text-primary"></i>
+                        <span class="fw-medium">{{ car.name }}</span>
+                        {% if car.make %}
+                        <span class="text-muted small ms-1">{{ car.make }}{% if car.model_name %} {{ car.model_name }}{% endif %}</span>
+                        {% endif %}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 {% endblock %}
 

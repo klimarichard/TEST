@@ -83,6 +83,29 @@ class User(UserMixin, db.Model):
                 result.append(c)
         return result
 
+    def get_visible_cars(self):
+        """Accessible cars excluding ones the user (or owner globally) has hidden."""
+        hidden_ids = {h.car_id for h in UserCarHidden.query.filter_by(user_id=self.id).all()}
+        result = []
+        for c in self.get_accessible_cars():
+            if c.id in hidden_ids:
+                continue
+            if c.owner_id != self.id and c.hidden_from_shared:
+                continue
+            result.append(c)
+        return result
+
+    def get_hidden_cars(self):
+        """Accessible cars the user has hidden, with restore eligibility flag."""
+        hidden_ids = {h.car_id for h in UserCarHidden.query.filter_by(user_id=self.id).all()}
+        result = []
+        for c in self.get_accessible_cars():
+            personally_hidden = c.id in hidden_ids
+            owner_hidden = c.owner_id != self.id and c.hidden_from_shared
+            if personally_hidden or owner_hidden:
+                result.append({'car': c, 'can_restore': personally_hidden})
+        return result
+
 
 class Car(db.Model):
     __tablename__ = 'cars'
@@ -93,6 +116,7 @@ class Car(db.Model):
     year = db.Column(db.Integer)
     license_plate = db.Column(db.String(20))
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    hidden_from_shared = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     shares = db.relationship('CarShare', backref='car', lazy=True, cascade='all, delete-orphan')
@@ -101,6 +125,11 @@ class Car(db.Model):
     def is_accessible_by(self, user):
         return (self.owner_id == user.id or
                 CarShare.query.filter_by(car_id=self.id, user_id=user.id).first() is not None)
+
+    def is_hidden_for(self, user):
+        if UserCarHidden.query.filter_by(car_id=self.id, user_id=user.id).first():
+            return True
+        return self.owner_id != user.id and self.hidden_from_shared
 
     @property
     def display_name(self):
@@ -117,6 +146,14 @@ class CarShare(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     car_id = db.Column(db.Integer, db.ForeignKey('cars.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    __table_args__ = (db.UniqueConstraint('car_id', 'user_id'),)
+
+
+class UserCarHidden(db.Model):
+    __tablename__ = 'user_car_hidden'
+    id = db.Column(db.Integer, primary_key=True)
+    car_id = db.Column(db.Integer, db.ForeignKey('cars.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     __table_args__ = (db.UniqueConstraint('car_id', 'user_id'),)
 
 
@@ -561,15 +598,16 @@ def dashboard():
     if current_user.is_admin:
         return redirect(url_for('admin_overview'))
     from collections import defaultdict
-    cars = current_user.get_accessible_cars()
-    car_ids = [c.id for c in cars]
+    all_cars    = current_user.get_accessible_cars()   # for stats (includes hidden)
+    visible_cars = current_user.get_visible_cars()     # for car grid display
+    car_ids = [c.id for c in all_cars]
 
     all_expenses = (Expense.query
                     .filter(Expense.car_id.in_(car_ids))
                     .order_by(Expense.date)
                     .all()) if car_ids else []
 
-    car_totals = {c.id: 0.0 for c in cars}
+    car_totals = {c.id: 0.0 for c in all_cars}
     monthly_data: dict = defaultdict(float)
     type_totals: dict = defaultdict(float)
 
@@ -583,8 +621,11 @@ def dashboard():
     this_month_total = monthly_data.get(this_month, 0.0)
     recent_expenses = sorted(all_expenses, key=lambda e: (e.date, e.created_at), reverse=True)[:10]
 
+    hidden_count = len(all_cars) - len(visible_cars)
+
     return render_template('dashboard.html',
-        cars=cars,
+        cars=visible_cars,
+        hidden_count=hidden_count,
         car_totals=car_totals,
         recent_expenses=recent_expenses,
         total_spent=sum(type_totals.values()),
@@ -665,8 +706,9 @@ def expense_export():
 def cars_list():
     if current_user.is_admin:
         return redirect(url_for('admin_overview'))
-    cars = current_user.get_accessible_cars()
-    return render_template('cars/list.html', cars=cars)
+    cars = current_user.get_visible_cars()
+    hidden_cars = current_user.get_hidden_cars()
+    return render_template('cars/list.html', cars=cars, hidden_cars=hidden_cars)
 
 
 @app.route('/cars/new', methods=['GET', 'POST'])
@@ -814,6 +856,38 @@ def car_edit(car_id):
         flash('Car updated.', 'success')
         return redirect(url_for('car_detail', car_id=car.id))
     return render_template('cars/form.html', car=car)
+
+
+@app.route('/cars/<int:car_id>/hide', methods=['POST'])
+@login_required
+def car_hide(car_id):
+    car = Car.query.get_or_404(car_id)
+    if not car.is_accessible_by(current_user):
+        abort(403)
+    existing = UserCarHidden.query.filter_by(car_id=car_id, user_id=current_user.id).first()
+    if not existing:
+        db.session.add(UserCarHidden(car_id=car_id, user_id=current_user.id))
+    if car.owner_id == current_user.id and request.form.get('hide_globally'):
+        car.hidden_from_shared = True
+    db.session.commit()
+    flash(f'"{car.name}" marked as not used. You can restore it from My Cars.', 'info')
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/cars/<int:car_id>/unhide', methods=['POST'])
+@login_required
+def car_unhide(car_id):
+    car = Car.query.get_or_404(car_id)
+    if not car.is_accessible_by(current_user):
+        abort(403)
+    hidden = UserCarHidden.query.filter_by(car_id=car_id, user_id=current_user.id).first()
+    if hidden:
+        db.session.delete(hidden)
+    if car.owner_id == current_user.id:
+        car.hidden_from_shared = False
+    db.session.commit()
+    flash(f'"{car.name}" restored.', 'success')
+    return redirect(url_for('cars_list'))
 
 
 @app.route('/cars/<int:car_id>/delete', methods=['POST'])

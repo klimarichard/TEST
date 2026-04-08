@@ -11,7 +11,7 @@
     </a>
 </div>
 
-{% if not cars %}
+{% if not cars and not hidden_cars %}
 <div class="card">
     <div class="card-body empty-state">
         <i class="bi bi-car-front"></i>
@@ -23,7 +23,9 @@
     </div>
 </div>
 {% else %}
-<div class="row g-3">
+
+{% if cars %}
+<div class="row g-3 mb-4">
     {% for car in cars %}
     <div class="col-md-6 col-lg-4">
         <div class="card card-hover h-100">
@@ -72,11 +74,111 @@
                         <i class="bi bi-share"></i>
                     </a>
                     {% endif %}
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary rounded-3"
+                            data-bs-toggle="modal"
+                            data-bs-target="#hideModal{{ car.id }}"
+                            title="Mark as not used">
+                        <i class="bi bi-eye-slash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Hide confirmation modal #}
+    <div class="modal fade" id="hideModal{{ car.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content rounded-4 border-0 shadow">
+                <div class="modal-header border-0 pb-1">
+                    <h6 class="modal-title fw-bold">Mark as not used</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pt-1 pb-2">
+                    <p class="small mb-2">Hide <strong>{{ car.name }}</strong> from your dashboard?
+                    You can restore it any time from <em>My Cars</em>.</p>
+                    <form method="POST" action="{{ url_for('car_hide', car_id=car.id) }}">
+                        {% if car.owner_id == current_user.id and car.shares %}
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox"
+                                   name="hide_globally" id="hideGlobal{{ car.id }}">
+                            <label class="form-check-label small" for="hideGlobal{{ car.id }}">
+                                Also hide from all shared users
+                            </label>
+                        </div>
+                        {% endif %}
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-warning btn-sm rounded-3 flex-grow-1">
+                                <i class="bi bi-eye-slash me-1"></i>Hide
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-3"
+                                    data-bs-dismiss="modal">Cancel</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
     {% endfor %}
 </div>
+{% endif %}
+
+{# ── Hidden cars ── #}
+{% if hidden_cars %}
+<h6 class="fw-semibold text-muted mb-3 mt-2">
+    <i class="bi bi-eye-slash me-2"></i>Hidden Cars
+</h6>
+<div class="row g-3">
+    {% for item in hidden_cars %}
+    {% set car = item.car %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100 opacity-75">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-muted">{{ car.name }}</h5>
+                        {% if not item.can_restore %}
+                        <span class="badge bg-warning-subtle text-warning-emphasis small mt-1">
+                            <i class="bi bi-lock me-1"></i>Hidden by owner
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% if car.owner_id == current_user.id %}
+                    <span class="badge bg-primary-subtle text-primary rounded-pill">Owner</span>
+                    {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary rounded-pill">Shared</span>
+                    {% endif %}
+                </div>
+
+                {% if car.make or car.model_name %}
+                <div class="text-muted small mb-1">
+                    {{ car.make or '' }} {{ car.model_name or '' }}
+                    {% if car.year %}({{ car.year }}){% endif %}
+                </div>
+                {% endif %}
+
+                <hr class="my-3">
+
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('car_detail', car_id=car.id) }}"
+                       class="btn btn-sm btn-outline-secondary flex-grow-1 rounded-3">
+                        <i class="bi bi-bar-chart me-1"></i>View
+                    </a>
+                    {% if item.can_restore %}
+                    <form method="POST" action="{{ url_for('car_unhide', car_id=car.id) }}">
+                        <button type="submit" class="btn btn-sm btn-outline-success rounded-3"
+                                title="Restore to dashboard">
+                            <i class="bi bi-eye me-1"></i>Restore
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% endif %}
 {% endblock %}
