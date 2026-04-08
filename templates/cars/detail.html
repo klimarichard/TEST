@@ -93,6 +93,26 @@
 </div>
 {% endfor %}
 
+{# ── Inspection expiry warnings ── #}
+{% for e in inspection_warnings %}
+<div class="insurance-warning mb-2 d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+    <span>
+        {% if e.inspection_detail.is_expired %}
+        <strong>Expired:</strong>
+        {% else %}
+        <strong>Expiring soon:</strong>
+        {% endif %}
+        Technical Inspection
+        {% if e.inspection_detail.workshop %}({{ e.inspection_detail.workshop }}){% endif %}
+        — {{ e.inspection_detail.expiration_date.strftime('%d.%m.%Y') }}
+    </span>
+    <a href="{{ url_for('expense_edit', expense_id=e.id) }}" class="ms-auto btn btn-sm btn-warning rounded-3 py-0">
+        Update
+    </a>
+</div>
+{% endfor %}
+
 {# ── Stat row ── #}
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3">

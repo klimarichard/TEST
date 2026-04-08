@@ -26,11 +26,12 @@
                         <label class="form-label fw-medium small">Expense Type</label>
                         <div class="row g-2" id="typeTabs">
                             {% set types_meta = [
-                                ('fuel',      'bi-fuel-pump',          'Fuel'),
-                                ('repair',    'bi-wrench-adjustable',  'Repair'),
-                                ('toll',      'bi-signpost-2',         'Toll'),
-                                ('insurance', 'bi-shield-check',       'Insurance'),
-                                ('gadget',    'bi-phone',              'Gadget'),
+                                ('fuel',        'bi-fuel-pump',          'Fuel'),
+                                ('repair',      'bi-wrench-adjustable',  'Repair'),
+                                ('toll',        'bi-signpost-2',         'Toll'),
+                                ('insurance',   'bi-shield-check',       'Insurance'),
+                                ('gadget',      'bi-phone',              'Gadget'),
+                                ('inspection',  'bi-clipboard2-check',   'Inspection'),
                             ] %}
                             {% for t, icon, label in types_meta %}
                             <div class="col-6 col-sm-4 col-md">
@@ -253,6 +254,50 @@
                         </div>
                     </div>
 
+                    {# ── Inspection fields ── #}
+                    <div id="fields-inspection" class="type-fields" style="display:none">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-7">
+                                <label class="form-label fw-medium small">Workshop / Garage</label>
+                                <input type="text" name="workshop" class="form-control"
+                                       placeholder="e.g. AutoCentrum Praha"
+                                       value="{{ expense.inspection_detail.workshop if expense and expense.inspection_detail and expense.inspection_detail.workshop else '' }}">
+                            </div>
+                            <div class="col-sm-5">
+                                <label class="form-label fw-medium small">Odometer</label>
+                                <div class="input-group">
+                                    <input type="number" name="inspection_odometer" class="form-control"
+                                           min="0" placeholder="km"
+                                           value="{{ expense.inspection_detail.odometer if expense and expense.inspection_detail and expense.inspection_detail.odometer else '' }}">
+                                    <span class="input-group-text">km</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Valid Until (Expiration Date)</label>
+                            <input type="date" name="inspection_expiration_date" class="form-control"
+                                   style="max-width:220px"
+                                   value="{{ expense.inspection_detail.expiration_date.isoformat() if expense and expense.inspection_detail and expense.inspection_detail.expiration_date else '' }}">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="inspection_notify_before_expiry"
+                                       id="inspectionNotifyCheck"
+                                       {% if expense and expense.inspection_detail and expense.inspection_detail.notify_before_expiry %}checked{% endif %}
+                                       onchange="toggleNotify('inspection')">
+                                <label class="form-check-label small" for="inspectionNotifyCheck">
+                                    Send me an email reminder before expiry
+                                </label>
+                            </div>
+                            <div id="notify-days-inspection" class="ms-4" style="display:none">
+                                <label class="form-label fw-medium small">Days before expiry <span class="text-muted fw-normal">(1–30)</span></label>
+                                <input type="number" name="inspection_notify_days_before" class="form-control"
+                                       style="max-width:120px" min="1" max="30"
+                                       value="{{ expense.inspection_detail.notify_days_before if expense and expense.inspection_detail and expense.inspection_detail.notify_days_before else 14 }}">
+                            </div>
+                        </div>
+                    </div>
+
                     {# ── Notes ── #}
                     <div class="mb-4">
                         <label class="form-label fw-medium small">Notes <span class="text-muted fw-normal">(optional)</span></label>
@@ -361,7 +406,7 @@ function toggleNotify(type) {
     if (div) div.style.display = cb && cb.checked ? '' : 'none';
 }
 // Init notification day fields on load
-['toll', 'insurance'].forEach(t => {
+['toll', 'insurance', 'inspection'].forEach(t => {
     const cb = document.getElementById(t + 'NotifyCheck');
     if (cb && cb.checked) toggleNotify(t);
 });

@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% block title %}Active Policies — CarTracker Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h4 class="fw-bold mb-0">
+        <i class="bi bi-shield-check me-2 text-primary"></i>Active Policies
+    </h4>
+    <a href="{{ url_for('admin_overview') }}" class="btn btn-sm btn-outline-secondary rounded-3">
+        <i class="bi bi-table me-1"></i>All Expenses
+    </a>
+</div>
+
+{# ── Filters ── #}
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <form method="GET" action="{{ url_for('admin_active') }}" id="filterForm">
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+
+                {# Users multi-select #}
+                <div>
+                    <div class="small fw-medium mb-1">Users</div>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 dropdown-toggle"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside" id="userDropdownBtn">
+                            <span id="userLabel">All</span>
+                        </button>
+                        <div class="dropdown-menu p-2 shadow-sm" style="min-width:180px">
+                            {% for u in users %}
+                            <div class="form-check">
+                                <input class="form-check-input user-check" type="checkbox"
+                                       name="user_id" value="{{ u.id }}" id="uc_{{ u.id }}"
+                                       {% if u.id in sel_user_ids %}checked{% endif %}>
+                                <label class="form-check-label small" for="uc_{{ u.id }}">{{ u.username }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                {# Cars multi-select #}
+                <div>
+                    <div class="small fw-medium mb-1">Cars</div>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 dropdown-toggle"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside" id="carDropdownBtn">
+                            <span id="carLabel">All</span>
+                        </button>
+                        <div class="dropdown-menu p-2 shadow-sm" style="min-width:200px;max-height:260px;overflow-y:auto">
+                            {% for c in cars %}
+                            <div class="form-check car-check-row"
+                                 data-owner="{{ c.owner_id }}"
+                                 data-shared="{{ c.shares | map(attribute='user_id') | join(',') }}">
+                                <input class="form-check-input car-check" type="checkbox"
+                                       name="car_id" value="{{ c.id }}" id="cc_{{ c.id }}"
+                                       {% if c.id in sel_car_ids %}checked{% endif %}>
+                                <label class="form-check-label small" for="cc_{{ c.id }}">{{ c.display_name }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
+                    <i class="bi bi-funnel me-1"></i>Apply
+                </button>
+                {% if sel_user_ids or sel_car_ids %}
+                <a href="{{ url_for('admin_active') }}" class="btn btn-outline-secondary btn-sm rounded-3">
+                    <i class="bi bi-x-lg me-1"></i>Clear
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+{% set section_meta = [
+    ('toll',       'bi-signpost-2',        'Tolls',                  '#ffc107'),
+    ('insurance',  'bi-shield-check',      'Insurance',              '#198754'),
+    ('inspection', 'bi-clipboard2-check',  'Technical Inspections',  '#fd7e14'),
+] %}
+
+{% for type_key, icon, title, color in section_meta %}
+{% set section = policies[type_key] %}
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center gap-2 py-2">
+        <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+        <span class="fw-semibold">{{ title }}</span>
+        {% set active_count = section.active | length %}
+        {% if active_count %}
+        <span class="badge rounded-pill ms-1" style="background:{{ color }}22;color:{{ color }};border:1px solid {{ color }}44">
+            {{ active_count }} active
+        </span>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        {% if not section.active and not section.expired %}
+        <div class="text-center text-muted py-4 small">
+            <i class="bi {{ icon }} d-block fs-3 mb-2 opacity-25"></i>
+            No {{ title | lower }} recorded yet.
+        </div>
+        {% else %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="fw-medium px-3">Car</th>
+                        <th class="fw-medium">Owner</th>
+                        <th class="fw-medium">Added by</th>
+                        <th class="fw-medium">Details</th>
+                        <th class="fw-medium">Added</th>
+                        <th class="fw-medium">Valid Until</th>
+                        <th class="fw-medium">Status</th>
+                        <th class="fw-medium text-end pe-3">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {# Active entries first #}
+                {% for e in section.active %}
+                {% set detail = e.detail %}
+                <tr>
+                    <td class="px-3 fw-medium small">{{ e.car.name }}</td>
+                    <td class="text-muted small">{{ e.car.owner.username }}</td>
+                    <td class="text-muted small">{{ e.user.username }}</td>
+                    <td class="text-muted small">
+                        {% if type_key == 'toll' and e.toll_detail %}
+                            {{ e.toll_detail.toll_type or '—' }}
+                            {% if e.toll_detail.route %}<span class="text-body-secondary"> · {{ e.toll_detail.route }}</span>{% endif %}
+                        {% elif type_key == 'insurance' and e.insurance_detail %}
+                            {{ e.insurance_detail.insurance_type or '—' }}
+                            {% if e.insurance_detail.provider %}<span class="text-body-secondary"> · {{ e.insurance_detail.provider }}</span>{% endif %}
+                        {% elif type_key == 'inspection' and e.inspection_detail %}
+                            {{ e.inspection_detail.workshop or '—' }}
+                            {% if e.inspection_detail.odometer %}<span class="text-body-secondary"> · {{ '{:,}'.format(e.inspection_detail.odometer) }} km</span>{% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="text-muted small text-nowrap">{{ e.date.strftime('%d.%m.%Y') }}</td>
+                    <td class="text-nowrap small fw-medium">
+                        {% if detail and detail.expiration_date %}
+                            {{ detail.expiration_date.strftime('%d.%m.%Y') }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if detail and detail.expiration_date %}
+                            {% if detail.is_expiring_soon %}
+                            <span class="badge bg-warning text-dark">Expiring soon</span>
+                            {% else %}
+                            <span class="badge bg-success">Active</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-secondary">No expiry</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end pe-3 small fw-semibold text-nowrap">{{ e.amount_czk | czk }}</td>
+                </tr>
+                {% endfor %}
+
+                {# Expired entries at the bottom #}
+                {% if section.expired %}
+                {% if section.active %}
+                <tr class="table-light">
+                    <td colspan="8" class="py-1 px-3 small text-muted fw-medium">
+                        <i class="bi bi-clock-history me-1"></i>Expired
+                    </td>
+                </tr>
+                {% endif %}
+                {% for e in section.expired %}
+                {% set detail = e.detail %}
+                <tr class="opacity-50">
+                    <td class="px-3 fw-medium small">{{ e.car.name }}</td>
+                    <td class="text-muted small">{{ e.car.owner.username }}</td>
+                    <td class="text-muted small">{{ e.user.username }}</td>
+                    <td class="text-muted small">
+                        {% if type_key == 'toll' and e.toll_detail %}
+                            {{ e.toll_detail.toll_type or '—' }}
+                            {% if e.toll_detail.route %}<span class="text-body-secondary"> · {{ e.toll_detail.route }}</span>{% endif %}
+                        {% elif type_key == 'insurance' and e.insurance_detail %}
+                            {{ e.insurance_detail.insurance_type or '—' }}
+                            {% if e.insurance_detail.provider %}<span class="text-body-secondary"> · {{ e.insurance_detail.provider }}</span>{% endif %}
+                        {% elif type_key == 'inspection' and e.inspection_detail %}
+                            {{ e.inspection_detail.workshop or '—' }}
+                            {% if e.inspection_detail.odometer %}<span class="text-body-secondary"> · {{ '{:,}'.format(e.inspection_detail.odometer) }} km</span>{% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="text-muted small text-nowrap">{{ e.date.strftime('%d.%m.%Y') }}</td>
+                    <td class="text-nowrap small">
+                        {% if detail and detail.expiration_date %}
+                            {{ detail.expiration_date.strftime('%d.%m.%Y') }}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-danger">Expired</span></td>
+                    <td class="text-end pe-3 small text-nowrap">{{ e.amount_czk | czk }}</td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateLabel(selector, labelId) {
+    const checked = document.querySelectorAll(selector + ':checked');
+    const label = document.getElementById(labelId);
+    if (!label) return;
+    if (checked.length === 0) {
+        label.textContent = 'All';
+    } else if (checked.length === 1) {
+        label.textContent = checked[0].closest('.form-check').querySelector('label').textContent.trim();
+    } else {
+        label.textContent = checked.length + ' selected';
+    }
+}
+
+function filterCarsByUsers() {
+    const checkedUsers = Array.from(document.querySelectorAll('.user-check:checked')).map(c => c.value);
+    document.querySelectorAll('.car-check-row').forEach(row => {
+        if (checkedUsers.length === 0) { row.hidden = false; return; }
+        const owner = row.dataset.owner;
+        const shared = row.dataset.shared ? row.dataset.shared.split(',') : [];
+        const visible = checkedUsers.some(uid => uid === owner || shared.includes(uid));
+        row.hidden = !visible;
+        if (!visible) row.querySelector('.car-check').checked = false;
+    });
+    updateLabel('.car-check', 'carLabel');
+}
+
+document.querySelectorAll('.user-check').forEach(cb => {
+    cb.addEventListener('change', () => { updateLabel('.user-check', 'userLabel'); filterCarsByUsers(); });
+});
+document.querySelectorAll('.car-check').forEach(cb => {
+    cb.addEventListener('change', () => updateLabel('.car-check', 'carLabel'));
+});
+
+updateLabel('.user-check', 'userLabel');
+filterCarsByUsers();
+updateLabel('.car-check', 'carLabel');
+</script>
+{% endblock %}

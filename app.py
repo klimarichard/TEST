@@ -157,19 +157,20 @@ class UserCarHidden(db.Model):
     __table_args__ = (db.UniqueConstraint('car_id', 'user_id'),)
 
 
-EXPENSE_TYPES = ['fuel', 'repair', 'toll', 'insurance', 'gadget']
+EXPENSE_TYPES = ['fuel', 'repair', 'toll', 'insurance', 'gadget', 'inspection']
 TYPE_LABELS = {
     'fuel': 'Fuel', 'repair': 'Repair', 'toll': 'Toll',
     'insurance': 'Insurance', 'gadget': 'Gadget',
+    'inspection': 'Technical Inspection',
 }
 TYPE_ICONS = {
     'fuel': 'bi-fuel-pump', 'repair': 'bi-wrench-adjustable',
     'toll': 'bi-signpost-2', 'insurance': 'bi-shield-check',
-    'gadget': 'bi-phone',
+    'gadget': 'bi-phone', 'inspection': 'bi-clipboard2-check',
 }
 TYPE_COLORS = {
     'fuel': '#0dcaf0', 'repair': '#dc3545', 'toll': '#ffc107',
-    'insurance': '#198754', 'gadget': '#6f42c1',
+    'insurance': '#198754', 'gadget': '#6f42c1', 'inspection': '#fd7e14',
 }
 
 
@@ -191,6 +192,7 @@ class Expense(db.Model):
     toll_detail = db.relationship('TollDetail', backref='expense', uselist=False, cascade='all, delete-orphan')
     insurance_detail = db.relationship('InsuranceDetail', backref='expense', uselist=False, cascade='all, delete-orphan')
     gadget_detail = db.relationship('GadgetDetail', backref='expense', uselist=False, cascade='all, delete-orphan')
+    inspection_detail = db.relationship('InspectionDetail', backref='expense', uselist=False, cascade='all, delete-orphan')
 
     def can_edit(self, user):
         return user.is_admin or self.user_id == user.id or self.car.owner_id == user.id
@@ -209,8 +211,8 @@ class Expense(db.Model):
 
     @property
     def detail(self):
-        return (self.fuel_detail or self.repair_detail or
-                self.toll_detail or self.insurance_detail or self.gadget_detail)
+        return (self.fuel_detail or self.repair_detail or self.toll_detail or
+                self.insurance_detail or self.gadget_detail or self.inspection_detail)
 
 
 class FuelDetail(db.Model):
@@ -325,6 +327,40 @@ class GadgetDetail(db.Model):
         return self.gadget_type or '—'
 
 
+class InspectionDetail(db.Model):
+    __tablename__ = 'inspection_details'
+    id = db.Column(db.Integer, primary_key=True)
+    expense_id = db.Column(db.Integer, db.ForeignKey('expenses.id'), nullable=False)
+    workshop = db.Column(db.String(200))
+    odometer = db.Column(db.Integer)
+    expiration_date = db.Column(db.Date)
+    notify_before_expiry = db.Column(db.Boolean, default=False)
+    notify_days_before = db.Column(db.Integer, default=14)
+    notification_sent = db.Column(db.Boolean, default=False)
+
+    @property
+    def summary(self):
+        parts = []
+        if self.workshop:
+            parts.append(self.workshop)
+        if self.odometer:
+            parts.append(f'@ {self.odometer:,} km')
+        if self.expiration_date:
+            parts.append(f'exp. {self.expiration_date.strftime("%d.%m.%Y")}')
+        return ' · '.join(parts) if parts else '—'
+
+    @property
+    def is_expiring_soon(self):
+        if not self.expiration_date:
+            return False
+        from datetime import timedelta
+        return date.today() < self.expiration_date <= date.today() + timedelta(days=30)
+
+    @property
+    def is_expired(self):
+        return bool(self.expiration_date and self.expiration_date < date.today())
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -346,6 +382,62 @@ def admin_required(f):
 
 
 _rate_cache: dict = {}
+
+
+def _filter_superseded_tolls(warnings, all_expenses):
+    """Remove toll warnings that have been superseded by a newer non-expired toll with the same type+route."""
+    result = []
+    for e in warnings:
+        d = e.toll_detail
+        key = (d.toll_type, d.route)
+        superseded = any(
+            o.id != e.id
+            and o.expense_type == 'toll'
+            and o.toll_detail
+            and (o.toll_detail.toll_type, o.toll_detail.route) == key
+            and o.date > e.date
+            and not o.toll_detail.is_expired
+            for o in all_expenses
+        )
+        if not superseded:
+            result.append(e)
+    return result
+
+
+def _filter_superseded_insurance(warnings, all_expenses):
+    """Remove insurance warnings superseded by a newer non-expired insurance with the same type."""
+    result = []
+    for e in warnings:
+        key = e.insurance_detail.insurance_type
+        superseded = any(
+            o.id != e.id
+            and o.expense_type == 'insurance'
+            and o.insurance_detail
+            and o.insurance_detail.insurance_type == key
+            and o.date > e.date
+            and not o.insurance_detail.is_expired
+            for o in all_expenses
+        )
+        if not superseded:
+            result.append(e)
+    return result
+
+
+def _filter_superseded_inspections(warnings, all_expenses):
+    """Remove inspection warnings superseded by a newer non-expired inspection on the same car."""
+    result = []
+    for e in warnings:
+        superseded = any(
+            o.id != e.id
+            and o.expense_type == 'inspection'
+            and o.inspection_detail
+            and o.date > e.date
+            and not o.inspection_detail.is_expired
+            for o in all_expenses
+        )
+        if not superseded:
+            result.append(e)
+    return result
 
 
 def get_exchange_rate(from_currency: str, to_currency: str = 'CZK') -> float | None:
@@ -698,6 +790,86 @@ def expense_export():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Active policies (tolls, insurance, inspections)
+# ─────────────────────────────────────────────────────────────────────────────
+
+POLICY_TYPES = ['toll', 'insurance', 'inspection']
+
+
+def _build_policy_entries(expenses):
+    """
+    Given a list of expenses of policy types, return a dict keyed by type,
+    each containing two lists: active (sorted soonest expiry first) and expired
+    (sorted most recently expired first).
+    """
+    result = {t: {'active': [], 'expired': []} for t in POLICY_TYPES}
+    for e in expenses:
+        t = e.expense_type
+        detail = e.detail
+        if detail is None or not hasattr(detail, 'is_expired'):
+            continue
+        if detail.is_expired:
+            result[t]['expired'].append(e)
+        else:
+            result[t]['active'].append(e)
+    for t in POLICY_TYPES:
+        result[t]['active'].sort(key=lambda e: (e.detail.expiration_date or date.max))
+        result[t]['expired'].sort(key=lambda e: (e.detail.expiration_date or date.min), reverse=True)
+    return result
+
+
+@app.route('/active')
+@login_required
+def active_policies():
+    if current_user.is_admin:
+        return redirect(url_for('admin_active'))
+    cars = current_user.get_accessible_cars()
+    sel_car_ids = request.args.getlist('car_id', type=int)
+    if sel_car_ids:
+        car_ids = [c.id for c in cars if c.id in sel_car_ids]
+    else:
+        car_ids = [c.id for c in cars]
+
+    expenses = (Expense.query
+                .filter(Expense.car_id.in_(car_ids))
+                .filter(Expense.expense_type.in_(POLICY_TYPES))
+                .order_by(Expense.date.desc())
+                .all()) if car_ids else []
+
+    return render_template('active.html',
+        cars=cars,
+        sel_car_ids=sel_car_ids,
+        policies=_build_policy_entries(expenses),
+    )
+
+
+@app.route('/admin/active')
+@admin_required
+def admin_active():
+    from collections import defaultdict
+    users = User.query.filter_by(is_admin=False).order_by(User.username).all()
+    cars = Car.query.order_by(Car.name).all()
+
+    sel_user_ids = request.args.getlist('user_id', type=int)
+    sel_car_ids = request.args.getlist('car_id', type=int)
+
+    q = Expense.query.filter(Expense.expense_type.in_(POLICY_TYPES))
+    if sel_user_ids:
+        q = q.filter(Expense.user_id.in_(sel_user_ids))
+    if sel_car_ids:
+        q = q.filter(Expense.car_id.in_(sel_car_ids))
+    expenses = q.order_by(Expense.date.desc()).all()
+
+    return render_template('admin/active.html',
+        users=users,
+        cars=cars,
+        sel_user_ids=sel_user_ids,
+        sel_car_ids=sel_car_ids,
+        policies=_build_policy_entries(expenses),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Cars
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -797,17 +969,28 @@ def car_detail(car_id):
         if total_km > 0:
             overall_eff = round(total_liters / total_km * 100, 2)
 
-    # Insurance warnings
-    insurance_warnings = [
-        e for e in expenses
-        if e.expense_type == 'insurance' and e.insurance_detail
-        and (e.insurance_detail.is_expired or e.insurance_detail.is_expiring_soon)
-    ]
-    toll_warnings = [
+    # Expiry warnings — suppressed when a newer non-expired entry with the same key exists
+    raw_toll_warnings = [
         e for e in expenses
         if e.expense_type == 'toll' and e.toll_detail and e.toll_detail.expiration_date
         and (e.toll_detail.is_expired or e.toll_detail.is_expiring_soon)
     ]
+    toll_warnings = _filter_superseded_tolls(raw_toll_warnings, expenses)
+
+    raw_insurance_warnings = [
+        e for e in expenses
+        if e.expense_type == 'insurance' and e.insurance_detail
+        and (e.insurance_detail.is_expired or e.insurance_detail.is_expiring_soon)
+    ]
+    insurance_warnings = _filter_superseded_insurance(raw_insurance_warnings, expenses)
+
+    raw_inspection_warnings = [
+        e for e in expenses
+        if e.expense_type == 'inspection' and e.inspection_detail
+        and e.inspection_detail.expiration_date
+        and (e.inspection_detail.is_expired or e.inspection_detail.is_expiring_soon)
+    ]
+    inspection_warnings = _filter_superseded_inspections(raw_inspection_warnings, expenses)
 
     return render_template('cars/detail.html',
         car=car,
@@ -817,6 +1000,7 @@ def car_detail(car_id):
         total_spent=sum(e.amount_czk for e in expenses),
         insurance_warnings=insurance_warnings,
         toll_warnings=toll_warnings,
+        inspection_warnings=inspection_warnings,
         eff_from=eff_from_str,
         eff_to=eff_to_str,
         overall_eff=overall_eff,
@@ -1068,6 +1252,30 @@ def _apply_type_detail(expense, form):
         if not expense.gadget_detail:
             db.session.add(d)
 
+    elif t == 'inspection':
+        d = expense.inspection_detail or InspectionDetail()
+        d.expense_id = expense.id
+        d.workshop = form.get('workshop', '').strip() or None
+        try:
+            d.odometer = int(form.get('inspection_odometer') or 0) or None
+        except (ValueError, TypeError):
+            d.odometer = None
+        exp_str = form.get('inspection_expiration_date', '').strip()
+        try:
+            new_expiry = datetime.strptime(exp_str, '%Y-%m-%d').date() if exp_str else None
+        except ValueError:
+            new_expiry = None
+        if new_expiry != d.expiration_date:
+            d.notification_sent = False
+        d.expiration_date = new_expiry
+        d.notify_before_expiry = bool(form.get('inspection_notify_before_expiry'))
+        try:
+            d.notify_days_before = max(1, min(30, int(form.get('inspection_notify_days_before') or 14)))
+        except (ValueError, TypeError):
+            d.notify_days_before = 14
+        if not expense.inspection_detail:
+            db.session.add(d)
+
 
 @app.route('/cars/<int:car_id>/expenses/new', methods=['GET', 'POST'])
 @login_required
@@ -1232,6 +1440,15 @@ def admin_overview():
         elif e.expense_type == 'gadget' and e.gadget_detail:
             if e.gadget_detail.gadget_type:
                 d['fields'] = [['Item', e.gadget_detail.gadget_type]]
+        elif e.expense_type == 'inspection' and e.inspection_detail:
+            fields = []
+            if e.inspection_detail.workshop:
+                fields.append(['Workshop', e.inspection_detail.workshop])
+            if e.inspection_detail.odometer:
+                fields.append(['Odometer', f'{e.inspection_detail.odometer:,} km'])
+            if e.inspection_detail.expiration_date:
+                fields.append(['Expires', e.inspection_detail.expiration_date.strftime('%d.%m.%Y')])
+            d['fields'] = fields
         expense_details[e.id] = d
 
     return render_template('admin/overview.html',
@@ -1510,6 +1727,18 @@ def send_expiry_notifications():
             if d.expiration_date - today == timedelta(days=d.notify_days_before):
                 _send_notification_email(
                     d.expense.user, 'Insurance', d.expense.car.display_name,
+                    d.expense.date, d.expiration_date, d.notify_days_before,
+                )
+                d.notification_sent = True
+
+        inspections = (InspectionDetail.query
+                       .filter_by(notify_before_expiry=True, notification_sent=False)
+                       .filter(InspectionDetail.expiration_date.isnot(None))
+                       .all())
+        for d in inspections:
+            if d.expiration_date - today == timedelta(days=d.notify_days_before):
+                _send_notification_email(
+                    d.expense.user, 'Technical Inspection', d.expense.car.display_name,
                     d.expense.date, d.expiration_date, d.notify_days_before,
                 )
                 d.notification_sent = True
