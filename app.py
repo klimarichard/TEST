@@ -13,6 +13,7 @@ from flask_migrate import Migrate
 from flask_login import (LoginManager, UserMixin, login_user, logout_user,
                          login_required, current_user)
 from flask_wtf.csrf import CSRFProtect
+from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -35,6 +36,14 @@ csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'warning'
+
+app.config['MAIL_SERVER']         = os.environ.get('MAIL_SERVER', 'smtp.example.com')
+app.config['MAIL_PORT']           = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS']        = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+app.config['MAIL_USERNAME']       = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD']       = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@carexpenses.app')
+mail = Mail(app)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -206,6 +215,10 @@ class TollDetail(db.Model):
     expense_id = db.Column(db.Integer, db.ForeignKey('expenses.id'), nullable=False)
     route = db.Column(db.String(200))
     toll_type = db.Column(db.String(50))
+    expiration_date = db.Column(db.Date, nullable=True)
+    notify_before_expiry = db.Column(db.Boolean, default=False)
+    notify_days_before = db.Column(db.Integer, default=14)
+    notification_sent = db.Column(db.Boolean, default=False)
 
     @property
     def summary(self):
@@ -214,7 +227,20 @@ class TollDetail(db.Model):
             parts.append(self.toll_type)
         if self.route:
             parts.append(self.route)
+        if self.expiration_date:
+            parts.append(f'exp. {self.expiration_date.strftime("%d.%m.%Y")}')
         return ' · '.join(parts) if parts else '—'
+
+    @property
+    def is_expiring_soon(self):
+        if not self.expiration_date:
+            return False
+        from datetime import timedelta
+        return date.today() < self.expiration_date <= date.today() + timedelta(days=30)
+
+    @property
+    def is_expired(self):
+        return bool(self.expiration_date and self.expiration_date < date.today())
 
 
 class InsuranceDetail(db.Model):
@@ -224,6 +250,9 @@ class InsuranceDetail(db.Model):
     insurance_type = db.Column(db.String(100))
     provider = db.Column(db.String(100))
     expiration_date = db.Column(db.Date)
+    notify_before_expiry = db.Column(db.Boolean, default=False)
+    notify_days_before = db.Column(db.Integer, default=14)
+    notification_sent = db.Column(db.Boolean, default=False)
 
     @property
     def summary(self):
@@ -682,11 +711,25 @@ def car_detail(car_id):
 
     all_months = sorted(monthly_by_type.keys())[-12:]
 
+    # Fuel efficiency date filter
+    eff_from_str = request.args.get('eff_from', '').strip()
+    eff_to_str   = request.args.get('eff_to', '').strip()
+    try:
+        eff_from = datetime.strptime(eff_from_str, '%Y-%m-%d').date() if eff_from_str else None
+    except ValueError:
+        eff_from = None
+    try:
+        eff_to = datetime.strptime(eff_to_str, '%Y-%m-%d').date() if eff_to_str else None
+    except ValueError:
+        eff_to = None
+
     # Fuel efficiency L/100 km
     fuel_exps = sorted(
         [e for e in expenses
          if e.expense_type == 'fuel' and e.fuel_detail
-         and e.fuel_detail.odometer and e.fuel_detail.liters],
+         and e.fuel_detail.odometer and e.fuel_detail.liters
+         and (eff_from is None or e.date >= eff_from)
+         and (eff_to   is None or e.date <= eff_to)],
         key=lambda e: e.fuel_detail.odometer,
     )
     eff_labels, eff_data = [], []
@@ -697,11 +740,24 @@ def car_detail(car_id):
             eff_labels.append(fuel_exps[i].date.strftime('%d.%m.%Y'))
             eff_data.append(round(eff, 2))
 
+    # Overall efficiency: total liters (fills 2..n) / total km
+    overall_eff = None
+    if len(fuel_exps) >= 2:
+        total_liters = sum(e.fuel_detail.liters for e in fuel_exps[1:])
+        total_km = fuel_exps[-1].fuel_detail.odometer - fuel_exps[0].fuel_detail.odometer
+        if total_km > 0:
+            overall_eff = round(total_liters / total_km * 100, 2)
+
     # Insurance warnings
     insurance_warnings = [
         e for e in expenses
         if e.expense_type == 'insurance' and e.insurance_detail
         and (e.insurance_detail.is_expired or e.insurance_detail.is_expiring_soon)
+    ]
+    toll_warnings = [
+        e for e in expenses
+        if e.expense_type == 'toll' and e.toll_detail and e.toll_detail.expiration_date
+        and (e.toll_detail.is_expired or e.toll_detail.is_expiring_soon)
     ]
 
     return render_template('cars/detail.html',
@@ -711,6 +767,10 @@ def car_detail(car_id):
         is_admin_view=is_admin_view,
         total_spent=sum(e.amount_czk for e in expenses),
         insurance_warnings=insurance_warnings,
+        toll_warnings=toll_warnings,
+        eff_from=eff_from_str,
+        eff_to=eff_to_str,
+        overall_eff=overall_eff,
         chart_stacked={
             'labels': all_months,
             'types': EXPENSE_TYPES,
@@ -832,6 +892,20 @@ def _parse_expense_form(form):
     }, None
 
 
+def _get_past_stations(user):
+    """Return sorted unique fuel station names from all cars accessible to the user."""
+    accessible_ids = [c.id for c in user.get_accessible_cars()]
+    if not accessible_ids:
+        return []
+    rows = (db.session.query(FuelDetail.station_location)
+            .join(Expense)
+            .filter(Expense.car_id.in_(accessible_ids))
+            .filter(FuelDetail.station_location.isnot(None))
+            .distinct()
+            .all())
+    return sorted(r[0] for r in rows)
+
+
 def _apply_type_detail(expense, form):
     """Create or update the type-specific detail row."""
     t = expense.expense_type
@@ -869,6 +943,19 @@ def _apply_type_detail(expense, form):
         d.expense_id = expense.id
         d.route = form.get('route', '').strip() or None
         d.toll_type = form.get('toll_type', '').strip() or None
+        exp_str = form.get('toll_expiration_date', '').strip()
+        try:
+            new_expiry = datetime.strptime(exp_str, '%Y-%m-%d').date() if exp_str else None
+        except ValueError:
+            new_expiry = None
+        if new_expiry != d.expiration_date:
+            d.notification_sent = False
+        d.expiration_date = new_expiry
+        d.notify_before_expiry = bool(form.get('toll_notify_before_expiry'))
+        try:
+            d.notify_days_before = max(1, min(30, int(form.get('toll_notify_days_before') or 14)))
+        except (ValueError, TypeError):
+            d.notify_days_before = 14
         if not expense.toll_detail:
             db.session.add(d)
 
@@ -879,9 +966,17 @@ def _apply_type_detail(expense, form):
         d.provider = form.get('provider', '').strip() or None
         exp_str = form.get('expiration_date', '').strip()
         try:
-            d.expiration_date = datetime.strptime(exp_str, '%Y-%m-%d').date() if exp_str else None
+            new_expiry = datetime.strptime(exp_str, '%Y-%m-%d').date() if exp_str else None
         except ValueError:
-            d.expiration_date = None
+            new_expiry = None
+        if new_expiry != d.expiration_date:
+            d.notification_sent = False
+        d.expiration_date = new_expiry
+        d.notify_before_expiry = bool(form.get('insurance_notify_before_expiry'))
+        try:
+            d.notify_days_before = max(1, min(30, int(form.get('insurance_notify_days_before') or 14)))
+        except (ValueError, TypeError):
+            d.notify_days_before = 14
         if not expense.insurance_detail:
             db.session.add(d)
 
@@ -921,10 +1016,12 @@ def expense_new(car_id):
             flash('Expense added.', 'success')
             return redirect(url_for('car_detail', car_id=car_id))
 
+    past_stations = _get_past_stations(current_user)
     return render_template('expenses/form.html',
         car=car, expense=None, expense_type=expense_type,
         currencies=SUPPORTED_CURRENCIES, toll_types=TOLL_TYPES,
         insurance_types=INSURANCE_TYPES, today=date.today().isoformat(),
+        past_stations=past_stations,
     )
 
 
@@ -951,10 +1048,12 @@ def expense_edit(expense_id):
             flash('Expense updated.', 'success')
             return redirect(url_for('car_detail', car_id=car.id))
 
+    past_stations = _get_past_stations(current_user)
     return render_template('expenses/form.html',
         car=car, expense=expense, expense_type=expense.expense_type,
         currencies=SUPPORTED_CURRENCIES, toll_types=TOLL_TYPES,
         insurance_types=INSURANCE_TYPES, today=date.today().isoformat(),
+        past_stations=past_stations,
     )
 
 
@@ -1274,6 +1373,69 @@ def create_admin_command(username, email, password):
 
 
 # DB is managed by Flask-Migrate. Run `flask db upgrade` to apply migrations.
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Expiry notifications
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _send_notification_email(user, expense_type, car_name, expense_date, expiry_date, days_left):
+    try:
+        msg = Message(
+            subject=f'{expense_type} expiring in {days_left} days — {car_name}',
+            recipients=[user.email],
+            body=(
+                f'Hello {user.username},\n\n'
+                f'Your {expense_type.lower()} expense for {car_name} '
+                f'(added on {expense_date.strftime("%d.%m.%Y")}) '
+                f'expires on {expiry_date.strftime("%d.%m.%Y")} '
+                f'({days_left} days from today).\n\n'
+                f'Log in to your Car Expenses app to review or renew it.\n'
+            ),
+        )
+        mail.send(msg)
+    except Exception as e:
+        app.logger.warning(f'Failed to send expiry notification to {user.email}: {e}')
+
+
+def send_expiry_notifications():
+    from datetime import timedelta
+    with app.app_context():
+        today = date.today()
+        tolls = (TollDetail.query
+                 .filter_by(notify_before_expiry=True, notification_sent=False)
+                 .filter(TollDetail.expiration_date.isnot(None))
+                 .all())
+        for d in tolls:
+            if d.expiration_date - today == timedelta(days=d.notify_days_before):
+                _send_notification_email(
+                    d.expense.user, 'Toll', d.expense.car.display_name,
+                    d.expense.date, d.expiration_date, d.notify_days_before,
+                )
+                d.notification_sent = True
+
+        insurances = (InsuranceDetail.query
+                      .filter_by(notify_before_expiry=True, notification_sent=False)
+                      .filter(InsuranceDetail.expiration_date.isnot(None))
+                      .all())
+        for d in insurances:
+            if d.expiration_date - today == timedelta(days=d.notify_days_before):
+                _send_notification_email(
+                    d.expense.user, 'Insurance', d.expense.car.display_name,
+                    d.expense.date, d.expiration_date, d.notify_days_before,
+                )
+                d.notification_sent = True
+
+        db.session.commit()
+
+
+# Start background scheduler (skip in Flask reloader child process to avoid duplicate)
+if not (app.debug and not os.environ.get('WERKZEUG_RUN_MAIN')):
+    from apscheduler.schedulers.background import BackgroundScheduler
+    _scheduler = BackgroundScheduler()
+    _scheduler.add_job(send_expiry_notifications, 'cron', hour=8, minute=0)
+    _scheduler.start()
+
 
 if __name__ == '__main__':
     app.run(debug=True)
