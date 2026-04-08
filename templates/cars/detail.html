@@ -73,6 +73,26 @@
 </div>
 {% endfor %}
 
+{# ── Toll expiry warnings ── #}
+{% for e in toll_warnings %}
+<div class="insurance-warning mb-2 d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+    <span>
+        {% if e.toll_detail.is_expired %}
+        <strong>Expired:</strong>
+        {% else %}
+        <strong>Expiring soon:</strong>
+        {% endif %}
+        {{ e.toll_detail.toll_type or 'Toll' }}
+        {% if e.toll_detail.route %}({{ e.toll_detail.route }}){% endif %}
+        — {{ e.toll_detail.expiration_date.strftime('%d.%m.%Y') }}
+    </span>
+    <a href="{{ url_for('expense_edit', expense_id=e.id) }}" class="ms-auto btn btn-sm btn-warning rounded-3 py-0">
+        Update
+    </a>
+</div>
+{% endfor %}
+
 {# ── Stat row ── #}
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3">
@@ -154,11 +174,48 @@
     </div>
 </div>
 
-{% if chart_fuel_eff.labels %}
+{% if chart_fuel_eff.labels or eff_from or eff_to %}
 <div class="card mb-4">
     <div class="card-body">
-        <h6 class="fw-semibold text-muted mb-3">Fuel Efficiency (L / 100 km)</h6>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h6 class="fw-semibold text-muted mb-0">
+                Fuel Efficiency (L / 100 km)
+                {% if overall_eff %}
+                <span class="text-body-secondary fw-normal fs-6 ms-2">
+                    Overall: <strong class="text-body">{{ overall_eff }} L/100 km</strong>
+                </span>
+                {% endif %}
+            </h6>
+            <form method="GET" action="{{ url_for('car_detail', car_id=car.id) }}"
+                  class="d-flex flex-wrap align-items-end gap-2">
+                <div>
+                    <label class="form-label small mb-1">From</label>
+                    <input type="date" name="eff_from" class="form-control form-control-sm"
+                           style="max-width:160px" value="{{ eff_from }}">
+                </div>
+                <div>
+                    <label class="form-label small mb-1">To</label>
+                    <input type="date" name="eff_to" class="form-control form-control-sm"
+                           style="max-width:160px" value="{{ eff_to }}">
+                </div>
+                <div class="d-flex gap-1">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Filter</button>
+                    {% if eff_from or eff_to %}
+                    <a href="{{ url_for('car_detail', car_id=car.id) }}"
+                       class="btn btn-sm btn-outline-secondary">Clear</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        {% if chart_fuel_eff.labels %}
         <canvas id="fuelEffChart" height="80"></canvas>
+        <p class="text-muted small mt-2 mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            Each point = liters filled ÷ km since last fill-up. Overall = total liters ÷ total km driven in the selected period.
+        </p>
+        {% else %}
+        <p class="text-muted small mb-0">No fill-ups with odometer readings in the selected date range.</p>
+        {% endif %}
     </div>
 </div>
 {% endif %}

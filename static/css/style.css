@@ -58,7 +58,27 @@ body {
     flex-shrink: 0;
 }
 
+/* Stat card text container: allow shrinking so amounts don't overflow on mobile */
+.stat-icon ~ div {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.stat-icon ~ div .fs-4,
+.stat-icon ~ div .fs-5 {
+    font-size: clamp(1rem, 4vw, 1.5rem) !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* ─── Tables ─────────────────────────────────────────────────────────────────── */
+
+/* Prevent table content from escaping the card's rounded corners */
+.card:has(.table-responsive) {
+    overflow: hidden;
+}
+
 .table > :not(caption) > * > * {
     padding: 0.65rem 0.85rem;
 }
@@ -146,6 +166,12 @@ body {
     border-radius: 0 8px 8px 0;
     padding: 0.5rem 0.85rem;
     font-size: 0.85rem;
+    flex-wrap: wrap;        /* allow wrapping on narrow screens */
+}
+
+.insurance-warning span {
+    min-width: 0;           /* allow flex child to shrink below content size */
+    word-break: break-word;
 }
 
 /* ─── Empty states ───────────────────────────────────────────────────────────── */

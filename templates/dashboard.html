@@ -167,7 +167,7 @@
                     <td class="text-muted small text-nowrap">{{ e.date.strftime('%d.%m.%Y') }}</td>
                     <td>
                         <a href="{{ url_for('car_detail', car_id=e.car_id) }}"
-                           class="text-decoration-none fw-medium text-dark">{{ e.car.name }}</a>
+                           class="text-decoration-none fw-medium text-body">{{ e.car.name }}</a>
                     </td>
                     <td>
                         <span class="badge-type badge-{{ e.expense_type }}">

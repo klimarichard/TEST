@@ -128,9 +128,15 @@
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
                                 <input type="text" name="station_location" class="form-control"
+                                       list="stationList" autocomplete="off"
                                        placeholder="e.g. Shell Praha - Smíchov"
                                        value="{{ expense.fuel_detail.station_location if expense and expense.fuel_detail and expense.fuel_detail.station_location else '' }}">
                             </div>
+                            <datalist id="stationList">
+                                {% for s in past_stations %}
+                                <option value="{{ s }}">
+                                {% endfor %}
+                            </datalist>
                         </div>
                     </div>
 
@@ -165,6 +171,29 @@
                                        value="{{ expense.toll_detail.route if expense and expense.toll_detail and expense.toll_detail.route else '' }}">
                             </div>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-medium small">Expiration Date</label>
+                            <input type="date" name="toll_expiration_date" class="form-control"
+                                   style="max-width:220px"
+                                   value="{{ expense.toll_detail.expiration_date.isoformat() if expense and expense.toll_detail and expense.toll_detail.expiration_date else '' }}">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="toll_notify_before_expiry"
+                                       id="tollNotifyCheck"
+                                       {% if expense and expense.toll_detail and expense.toll_detail.notify_before_expiry %}checked{% endif %}
+                                       onchange="toggleNotify('toll')">
+                                <label class="form-check-label small" for="tollNotifyCheck">
+                                    Send me an email reminder before expiry
+                                </label>
+                            </div>
+                            <div id="notify-days-toll" class="ms-4" style="display:none">
+                                <label class="form-label fw-medium small">Days before expiry <span class="text-muted fw-normal">(1–30)</span></label>
+                                <input type="number" name="toll_notify_days_before" class="form-control"
+                                       style="max-width:120px" min="1" max="30"
+                                       value="{{ expense.toll_detail.notify_days_before if expense and expense.toll_detail and expense.toll_detail.notify_days_before else 14 }}">
+                            </div>
+                        </div>
                     </div>
 
                     {# ── Insurance fields ── #}
@@ -194,6 +223,23 @@
                             <input type="date" name="expiration_date" class="form-control"
                                    style="max-width:220px"
                                    value="{{ expense.insurance_detail.expiration_date.isoformat() if expense and expense.insurance_detail and expense.insurance_detail.expiration_date else '' }}">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="insurance_notify_before_expiry"
+                                       id="insuranceNotifyCheck"
+                                       {% if expense and expense.insurance_detail and expense.insurance_detail.notify_before_expiry %}checked{% endif %}
+                                       onchange="toggleNotify('insurance')">
+                                <label class="form-check-label small" for="insuranceNotifyCheck">
+                                    Send me an email reminder before expiry
+                                </label>
+                            </div>
+                            <div id="notify-days-insurance" class="ms-4" style="display:none">
+                                <label class="form-label fw-medium small">Days before expiry <span class="text-muted fw-normal">(1–30)</span></label>
+                                <input type="number" name="insurance_notify_days_before" class="form-control"
+                                       style="max-width:120px" min="1" max="30"
+                                       value="{{ expense.insurance_detail.notify_days_before if expense and expense.insurance_detail and expense.insurance_detail.notify_days_before else 14 }}">
+                            </div>
                         </div>
                     </div>
 
@@ -308,5 +354,16 @@ document.getElementById('litersInput')?.addEventListener('input', computePricePe
 // Run once on load if editing and non-CZK
 updateCZK();
 computePricePerLiter();
+
+function toggleNotify(type) {
+    const cb = document.getElementById(type + 'NotifyCheck');
+    const div = document.getElementById('notify-days-' + type);
+    if (div) div.style.display = cb && cb.checked ? '' : 'none';
+}
+// Init notification day fields on load
+['toll', 'insurance'].forEach(t => {
+    const cb = document.getElementById(t + 'NotifyCheck');
+    if (cb && cb.checked) toggleNotify(t);
+});
 </script>
 {% endblock %}

@@ -12,7 +12,7 @@
     </a>
 </div>
 
-{# ── Car filter ── #}
+{# ── Filters ── #}
 {% if cars %}
 <div class="card mb-4">
     <div class="card-body py-3">
@@ -42,10 +42,32 @@
                         </div>
                     </div>
                 </div>
+                <div>
+                    <div class="small fw-medium mb-1">Type</div>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 dropdown-toggle"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <span id="typeLabel">All</span>
+                        </button>
+                        <div class="dropdown-menu p-2 shadow-sm" style="min-width:180px">
+                            {% for t in EXPENSE_TYPES %}
+                            <div class="form-check">
+                                <input class="form-check-input type-check" type="checkbox"
+                                       name="type" value="{{ t }}" id="tc_{{ t }}"
+                                       {% if t in sel_types %}checked{% endif %}>
+                                <label class="form-check-label small" for="tc_{{ t }}">
+                                    <i class="bi {{ TYPE_ICONS[t] }} me-1" style="color:{{ TYPE_COLORS[t] }}"></i>
+                                    {{ TYPE_LABELS[t] }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
                 <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
                     <i class="bi bi-funnel me-1"></i>Apply
                 </button>
-                {% if sel_car_ids %}
+                {% if sel_car_ids or sel_types %}
                 <a href="{{ url_for('expense_list') }}" class="btn btn-outline-secondary btn-sm rounded-3">
                     <i class="bi bi-x-lg me-1"></i>Clear
                 </a>
@@ -151,15 +173,17 @@
 
 {% block scripts %}
 <script>
-function updateCarLabel() {
-    const checked = document.querySelectorAll('.car-check:checked');
-    const label = document.getElementById('carLabel');
+function updateLabel(selector, labelId) {
+    const checked = document.querySelectorAll(selector + ':checked');
+    const label = document.getElementById(labelId);
     if (checked.length === 0) label.textContent = 'All';
     else if (checked.length === 1)
         label.textContent = checked[0].closest('.form-check').querySelector('label').textContent.trim();
     else label.textContent = checked.length + ' selected';
 }
-document.querySelectorAll('.car-check').forEach(cb => cb.addEventListener('change', updateCarLabel));
-updateCarLabel();
+document.querySelectorAll('.car-check').forEach(cb => cb.addEventListener('change', () => updateLabel('.car-check', 'carLabel')));
+document.querySelectorAll('.type-check').forEach(cb => cb.addEventListener('change', () => updateLabel('.type-check', 'typeLabel')));
+updateLabel('.car-check', 'carLabel');
+updateLabel('.type-check', 'typeLabel');
 </script>
 {% endblock %}

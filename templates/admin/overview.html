@@ -67,10 +67,34 @@
                     </div>
                 </div>
 
+                {# Type multi-select #}
+                <div>
+                    <div class="small fw-medium mb-1">Type</div>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 dropdown-toggle"
+                                data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                            <span id="typeLabel">All</span>
+                        </button>
+                        <div class="dropdown-menu p-2 shadow-sm" style="min-width:180px">
+                            {% for t in EXPENSE_TYPES %}
+                            <div class="form-check">
+                                <input class="form-check-input type-check" type="checkbox"
+                                       name="type" value="{{ t }}" id="tc_{{ t }}"
+                                       {% if t in sel_types %}checked{% endif %}>
+                                <label class="form-check-label small" for="tc_{{ t }}">
+                                    <i class="bi {{ TYPE_ICONS[t] }} me-1" style="color:{{ TYPE_COLORS[t] }}"></i>
+                                    {{ TYPE_LABELS[t] }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
                 <button type="submit" class="btn btn-primary btn-sm rounded-3 px-3">
                     <i class="bi bi-funnel me-1"></i>Apply
                 </button>
-                {% if sel_user_ids or sel_car_ids %}
+                {% if sel_user_ids or sel_car_ids or sel_types %}
                 <a href="{{ url_for('admin_overview') }}" class="btn btn-outline-secondary btn-sm rounded-3">
                     <i class="bi bi-x-lg me-1"></i>Clear
                 </a>
@@ -285,9 +309,14 @@ document.querySelectorAll('.car-check').forEach(cb => {
     cb.addEventListener('change', () => updateLabel('.car-check', 'carLabel', 'car'));
 });
 
+document.querySelectorAll('.type-check').forEach(cb => {
+    cb.addEventListener('change', () => updateLabel('.type-check', 'typeLabel', 'type'));
+});
+
 // Init labels and car filter on page load
 updateLabel('.user-check', 'userLabel', 'user');
 filterCarsByUsers();
 updateLabel('.car-check', 'carLabel', 'car');
+updateLabel('.type-check', 'typeLabel', 'type');
 </script>
 {% endblock %}
